@@ -1966,20 +1966,207 @@ document.querySelectorAll('input').forEach(inp => {
   inp.addEventListener('blur',  () => { _anyInputFocused = false; });
 });
 
-// keyboard: space = play/pause, arrows = next/prev
+// ============= NAVIGARE TELECOMANDA TV =============
+// Zone de focus: 'tabs' | 'list' | 'controls'
+let _tvZone = 'list';
+let _tvListIdx = 0;
+let _tvCtrlIdx = 1; // default pe butonul Play
+
+function _isTv() { return window.innerWidth >= 950; }
+
+function _tvGetChannels() {
+  return Array.from(document.querySelectorAll('#channel-list .channel'));
+}
+function _tvGetTabs() {
+  return Array.from(document.querySelectorAll('.mode-toggle button'));
+}
+function _tvGetCtrls() {
+  return Array.from(document.querySelectorAll('.np-controls .ctrl-btn'))
+    .filter(b => getComputedStyle(b).display !== 'none');
+}
+
+function _tvFocusList(idx) {
+  const items = _tvGetChannels();
+  if (!items.length) return;
+  _tvListIdx = Math.max(0, Math.min(idx, items.length - 1));
+  _tvZone = 'list';
+  items[_tvListIdx].focus({ preventScroll: false });
+  items[_tvListIdx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function _tvFocusTabs(idx) {
+  const tabs = _tvGetTabs();
+  if (!tabs.length) return;
+  const i = Math.max(0, Math.min(idx ?? tabs.findIndex(t => t.classList.contains('active')), tabs.length - 1));
+  _tvZone = 'tabs';
+  tabs[Math.max(0, i)].focus();
+}
+
+function _tvFocusCtrls(idx) {
+  const ctrls = _tvGetCtrls();
+  if (!ctrls.length) return;
+  _tvCtrlIdx = Math.max(0, Math.min(idx, ctrls.length - 1));
+  _tvZone = 'controls';
+  ctrls[_tvCtrlIdx].focus();
+}
+
 document.addEventListener('keydown', (e) => {
   if (_anyInputFocused || document.activeElement.tagName === 'INPUT') return;
-  if (e.code === 'Space') { e.preventDefault(); $('play-btn').click(); }
-  if (e.code === 'ArrowDown' && state.filtered.length) {
-    const idx = state.current ? state.filtered.findIndex(i => i.id === state.current.id) : -1;
-    const next = state.filtered[Math.min(idx + 1, state.filtered.length - 1)];
-    if (next) play(next);
+
+  const active = document.activeElement;
+  const inTab  = !!active.closest?.('.mode-toggle');
+  const inList = !!active.closest?.('#channel-list');
+  const inCtrl = !!active.closest?.('.np-controls');
+
+  // Pe non-TV (telefon/tabletă) — doar Space + Arrows simplu
+  if (!_isTv()) {
+    if (e.code === 'Space') { e.preventDefault(); $('play-btn').click(); }
+    if (e.code === 'ArrowDown' && state.filtered.length) {
+      e.preventDefault();
+      const idx = state.current ? state.filtered.findIndex(i => i.id === state.current.id) : -1;
+      const next = state.filtered[Math.min(idx + 1, state.filtered.length - 1)];
+      if (next) play(next);
+    }
+    if (e.code === 'ArrowUp' && state.filtered.length) {
+      e.preventDefault();
+      const idx = state.current ? state.filtered.findIndex(i => i.id === state.current.id) : 0;
+      const prev = state.filtered[Math.max(idx - 1, 0)];
+      if (prev) play(prev);
+    }
+    return;
   }
-  if (e.code === 'ArrowUp' && state.filtered.length) {
-    const idx = state.current ? state.filtered.findIndex(i => i.id === state.current.id) : 0;
-    const prev = state.filtered[Math.max(idx - 1, 0)];
-    if (prev) play(prev);
+
+  // ===== MOD TV: navigare completă cu telecomanda =====
+  e.preventDefault();
+
+  switch (e.code) {
+
+    // ---------- OK / Enter — activează elementul focusat ----------
+    case 'Enter':
+    case 'NumpadEnter':
+      if (inList) {
+        // Redă canalul focusat din listă
+        const items = _tvGetChannels();
+        if (items[_tvListIdx]) items[_tvListIdx].click();
+      } else if (active && active !== document.body) {
+        active.click();
+      }
+      break;
+
+    // ---------- Space — play/pause ----------
+    case 'Space':
+      $('play-btn').click();
+      break;
+
+    // ---------- Sus ----------
+    case 'ArrowUp':
+      if (inList) {
+        if (_tvListIdx > 0) {
+          _tvFocusList(_tvListIdx - 1);
+        } else {
+          // Top listă → merge la tab-uri
+          _tvFocusTabs();
+        }
+      } else if (inCtrl) {
+        // Controale → canal curent în listă
+        const cur = state.current ? _tvGetChannels().findIndex(
+          el => el.dataset.idx !== undefined &&
+                state.filtered[+el.dataset.idx]?.id === state.current.id
+        ) : 0;
+        _tvFocusList(Math.max(0, cur));
+      } else if (inTab) {
+        // Tab-uri → listă (prima poziție)
+        _tvFocusList(0);
+      } else {
+        _tvFocusList(_tvListIdx);
+      }
+      break;
+
+    // ---------- Jos ----------
+    case 'ArrowDown':
+      if (inTab) {
+        // Tab-uri → coboară în listă
+        _tvFocusList(0);
+      } else if (inList) {
+        const items = _tvGetChannels();
+        if (_tvListIdx < items.length - 1) {
+          _tvFocusList(_tvListIdx + 1);
+        }
+        // La final de listă rămânem pe ultimul
+      } else if (inCtrl) {
+        // Controale → înapoi la listă
+        _tvFocusList(_tvListIdx);
+      } else {
+        _tvFocusList(0);
+      }
+      break;
+
+    // ---------- Stânga ----------
+    case 'ArrowLeft':
+      if (inTab) {
+        // Tab anterior
+        const tabs = _tvGetTabs();
+        const ti = tabs.indexOf(active);
+        if (ti > 0) tabs[ti - 1].focus();
+        else tabs[0].focus();
+      } else if (inCtrl) {
+        // Control anterior
+        const ctrls = _tvGetCtrls();
+        const ci = ctrls.indexOf(active);
+        if (ci > 0) {
+          _tvCtrlIdx = ci - 1;
+          ctrls[_tvCtrlIdx].focus();
+        } else {
+          // Ajuns la capăt stânga → înapoi la listă
+          _tvFocusList(_tvListIdx);
+        }
+      } else if (inList) {
+        // Din listă → tab-uri
+        _tvFocusTabs();
+      } else {
+        _tvFocusTabs();
+      }
+      break;
+
+    // ---------- Dreapta ----------
+    case 'ArrowRight':
+      if (inTab) {
+        // Tab următor
+        const tabs = _tvGetTabs();
+        const ti = tabs.indexOf(active);
+        if (ti < tabs.length - 1) tabs[ti + 1].focus();
+        else tabs[tabs.length - 1].focus();
+      } else if (inList) {
+        // Din listă → controale player
+        _tvFocusCtrls(1); // focus direct pe Play
+      } else if (inCtrl) {
+        // Control următor
+        const ctrls = _tvGetCtrls();
+        const ci = ctrls.indexOf(active);
+        if (ci < ctrls.length - 1) {
+          _tvCtrlIdx = ci + 1;
+          ctrls[_tvCtrlIdx].focus();
+        }
+      } else {
+        _tvFocusCtrls(1);
+      }
+      break;
+
+    // ---------- Volume cu taste colorate / PageUp/Down ----------
+    case 'PageUp':
+    case 'ChannelUp':
+      { const v = $('volume'); v.value = Math.min(100, +v.value + 10); v.dispatchEvent(new Event('input')); }
+      break;
+    case 'PageDown':
+    case 'ChannelDown':
+      { const v = $('volume'); v.value = Math.max(0, +v.value - 10); v.dispatchEvent(new Event('input')); }
+      break;
   }
+});
+
+// Focus inițial pe primul canal când pagina se încarcă pe TV
+window.addEventListener('load', () => {
+  if (_isTv()) setTimeout(() => _tvFocusList(0), 800);
 });
 
 // ============= SIDEBAR TOGGLE (mobil) =============
