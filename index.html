@@ -803,26 +803,28 @@
 
   /* Tableta (601px - 1100px) */
   @media (max-width: 1100px) {
-    .app { grid-template-columns: 260px 1fr; }
+    aside { width: 260px; }
     .mode-toggle button { padding: 8px 12px; font-size: 16px; }
   }
 
-  /* Mobil (max 700px și Portret) — layout stivuit simplu, fara slide */
-  @media (max-width: 700px) and (orientation: portrait) {
+  /* Mobil (max 700px) — layout stivuit vertical */
+  @media (max-width: 700px) {
     html, body { overflow-x: hidden; overflow-y: auto; }
 
-    .sidebar-toggle { display: none; }
     .stats { display: none; }
     .sleep-indicator { display: none !important; }
     #fullscreen-btn, #custom-btn { display: none; }
-    .np-controls { gap: 4px; flex-wrap: nowrap; }
 
     .app {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto auto auto;
-      grid-template-areas: "header" "main" "sidebar";
       height: auto;
       min-height: 100vh;
+      overflow: visible;
+    }
+
+    /* main-container devine coloană: player sus, listă jos */
+    .main-container {
+      flex-direction: column;
+      overflow: visible;
     }
 
     header {
@@ -832,28 +834,35 @@
       min-height: 52px;
     }
     .logo { font-size: 13px; letter-spacing: 0.05em; flex-shrink: 0; }
-
     .mode-toggle { overflow-x: auto; flex: 1; }
     .mode-toggle::-webkit-scrollbar { display: none; }
     .mode-toggle button { padding: 5px 10px; font-size: 13px; white-space: nowrap; }
 
-    main { height: 310px; }
+    /* Player apare primul, lista dedesubt */
+    main {
+      width: 100%;
+      height: 300px;
+      flex-shrink: 0;
+      order: 1;
+    }
+
+    aside {
+      width: 100%;
+      height: 420px;
+      border-right: none;
+      border-top: 1px solid var(--grid-line);
+      flex-shrink: 0;
+      order: 2;
+    }
 
     .now-playing { height: 64px; padding: 0 10px; gap: 8px; }
     .np-logo { width: 40px; height: 40px; flex-shrink: 0; }
     .np-title { font-size: 17px; }
     .np-subtitle { font-size: 10px; }
-    .np-controls { gap: 6px; }
+    .np-controls { gap: 4px; flex-wrap: nowrap; }
     .ctrl-btn { width: 36px; height: 36px; font-size: 14px; }
     .ctrl-btn.play { width: 44px; height: 44px; }
     input[type="range"] { width: 55px; }
-
-    aside {
-      border-right: none;
-      border-top: 1px solid var(--grid-line);
-      height: 420px;
-      overflow: hidden;
-    }
 
     .search-box { padding: 10px; }
     .search-box input, .search-box select { padding: 9px 10px; font-size: 13px; }
@@ -864,7 +873,7 @@
 
   /* TV / ecrane mari (min 950px) */
   @media (min-width: 950px) {
-    .app { grid-template-columns: 400px 1fr; grid-template-rows: 80px 1fr; }
+    aside { width: 400px; }
     html, body { font-size: 18px; }
     header { height: 80px; padding: 0 32px; }
     .logo { font-size: 28px; }

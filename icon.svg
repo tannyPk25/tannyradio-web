@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#07050d"/>
+  <circle cx="256" cy="210" r="110" fill="none" stroke="#ff2e88" stroke-width="18"/>
+  <circle cx="256" cy="210" r="40" fill="#ff2e88"/>
+  <line x1="256" y1="100" x2="256" y2="75" stroke="#ff2e88" stroke-width="14" stroke-linecap="round"/>
+  <line x1="174" y1="128" x2="155" y2="109" stroke="#ff2e88" stroke-width="14" stroke-linecap="round"/>
+  <line x1="338" y1="128" x2="357" y2="109" stroke="#ff2e88" stroke-width="14" stroke-linecap="round"/>
+  <text x="256" y="400" font-family="monospace" font-size="88" fill="#00f0ff" text-anchor="middle" font-weight="bold" letter-spacing="4">TR</text>
+</svg>
