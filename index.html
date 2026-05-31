@@ -1310,18 +1310,43 @@ function mapStations(data, country) {
       country: s.countrycode || country,
       logo: (s.favicon && s.favicon !== 'null') ? s.favicon : '',
       tags: s.tags,
-      bitrate: s.bitrate,
+      bitrate: s.bitrate || 0,
+      clickcount: s.clickcount || 0,
     }));
 }
 
+// Normalizează numele pentru dedup: elimină markeri de calitate/format
+function _normName(name) {
+  return name
+    .toLowerCase()
+    .replace(/\s*[\(\[]\s*(hd|sd|fhd|4k|\d+\s*k?bps?|backup|live\s*\d*|stream\s*\d*|mirror|copy|online|v\d+)\s*[\)\]]/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function dedupStations(list) {
-  const seen = new Set();
-  return list.filter(s => {
-    const key = (s.name + '|' + s.url).toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
+  // Pasul 1: dedup după URL exact (prinde aceeași stație din cele 2 query-uri API)
+  const seenUrl = new Set();
+  const byUrl = list.filter(s => {
+    const k = s.url.toLowerCase();
+    if (seenUrl.has(k)) return false;
+    seenUrl.add(k);
     return true;
   });
+
+  // Pasul 2: dedup după nume normalizat — păstrăm stream-ul cu cele mai multe clickuri
+  // (ex: "Pro FM (128kbps)" și "Pro FM (320kbps)" → păstrăm pe cel mai popular)
+  const byName = new Map();
+  for (const s of byUrl) {
+    const key = _normName(s.name);
+    if (!key) continue;
+    const ex = byName.get(key);
+    if (!ex || s.clickcount > ex.clickcount || (s.clickcount === ex.clickcount && s.bitrate > ex.bitrate)) {
+      byName.set(key, s);
+    }
+  }
+
+  return [...byName.values()];
 }
 
 async function loadRadio(country) {
@@ -1346,15 +1371,25 @@ async function loadRadio(country) {
     try {
       const base = `https://${server}/json/stations`;
       const params = `limit=2000&hidebroken=false&order=clickcount`;
-      const [r1, r2] = await Promise.all([
+      // 3 query-uri paralele:
+      // r1 = după country code exact (RO)
+      // r2 = după country name complet (Romania)
+      // r3 = după limbă (română) — prinde stații fără country code setat corect
+      const langCode = country === 'RO' ? 'ro' : country.toLowerCase();
+      const [r1, r2, r3] = await Promise.all([
         fetch(`${base}/bycountrycodeexact/${country}?${params}`).then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch(`${base}/bycountry/${encodeURIComponent(fullName)}?${params}`).then(r => r.ok ? r.json() : []).catch(() => [])
+        fetch(`${base}/bycountry/${encodeURIComponent(fullName)}?${params}`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${base}/bylanguage/${encodeURIComponent(langCode)}?${params}`).then(r => r.ok ? r.json() : []).catch(() => [])
       ]);
-      const combined = [...r1, ...r2];
+      const combined = [...r1, ...r2, ...r3];
       if (!combined.length) continue;
       const list = dedupStations(mapStations(combined, country));
-      // sortare alfabetică case-insensitive
-      list.sort((a, b) => a.name.localeCompare(b.name, 'ro', { sensitivity: 'base' }));
+      // Sortare: întâi după popularitate (clickcount desc), la egalitate alfabetic
+      list.sort((a, b) =>
+        b.clickcount !== a.clickcount
+          ? b.clickcount - a.clickcount
+          : a.name.localeCompare(b.name, 'ro', { sensitivity: 'base' })
+      );
       state.radioCache[cacheKey] = list;
       state.radioList = list;
       return list;
