@@ -1,0 +1,1980 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>TannyRadio · TV & Radio</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#ff2e88">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TannyRadio">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Major+Mono+Display&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<style>
+  :root {
+    --bg-deep: #07050d;
+    --bg-card: #0f0a1f;
+    --bg-elevated: #1a1030;
+    --neon-pink: #ff2e88;
+    --neon-cyan: #00f0ff;
+    --neon-violet: #b14eff;
+    --neon-amber: #ffb627;
+    --text-primary: #f4e8ff;
+    --text-dim: #8a7ba8;
+    --grid-line: rgba(177, 78, 255, 0.12);
+    --scan-line: rgba(0, 240, 255, 0.04);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #07050d;
+    color: #f4e8ff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+  }
+
+  /* Atmospheric background directly on body */
+  body {
+    background-image:
+      radial-gradient(ellipse at 20% 0%, rgba(255, 46, 136, 0.15), transparent 50%),
+      radial-gradient(ellipse at 80% 100%, rgba(0, 240, 255, 0.12), transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(177, 78, 255, 0.08), transparent 70%);
+    background-attachment: fixed;
+  }
+
+  /* Scanlines moved to a separate layer inside app to avoid covering content */
+  .scanlines {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0, 240, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
+    background-size: 4px 4px;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.6;
+  }
+
+  .app {
+    position: relative;
+    z-index: 10;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  .main-container {
+    display: flex;
+    flex: 1;
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* HEADER */
+  header {
+    height: 64px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    border-bottom: 1px solid rgba(177, 78, 255, 0.2);
+    background: #0f0a1f;
+    flex-shrink: 0;
+  }
+
+  .logo {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 22px;
+    letter-spacing: 0.15em;
+    color: var(--neon-pink);
+    text-shadow:
+      0 0 10px rgba(255, 46, 136, 0.6),
+      0 0 20px rgba(255, 46, 136, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo::before {
+    content: '◉';
+    color: var(--neon-cyan);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; text-shadow: 0 0 8px var(--neon-cyan); }
+    50% { opacity: 0.4; text-shadow: 0 0 2px var(--neon-cyan); }
+  }
+
+  .mode-toggle {
+    display: flex;
+    background: var(--bg-elevated);
+    border: 1px solid var(--grid-line);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .mode-toggle button {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 8px 20px;
+    cursor: pointer;
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 0.1em;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+
+  .mode-toggle button.active {
+    background: var(--neon-pink);
+    color: var(--bg-deep);
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+  }
+
+  .mode-toggle button:hover:not(.active) {
+    color: var(--neon-cyan);
+  }
+
+  .stats {
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+
+  .stats span { color: var(--neon-amber); }
+
+  /* SIDEBAR */
+  aside {
+    width: 320px;
+    border-right: 1px solid rgba(177, 78, 255, 0.2);
+    display: flex;
+    flex-direction: column;
+    background: rgba(15, 10, 31, 0.8);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .search-box {
+    padding: 16px;
+    border-bottom: 1px solid var(--grid-line);
+  }
+
+  .search-box input,
+  .search-box select {
+    width: 100%;
+    background: var(--bg-deep);
+    border: 1px solid var(--grid-line);
+    color: var(--text-primary);
+    padding: 10px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    margin-bottom: 8px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .search-box input:focus,
+  .search-box select:focus {
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 0 1px var(--neon-cyan), 0 0 12px rgba(0, 240, 255, 0.3);
+  }
+
+  .search-box input::placeholder { color: var(--text-dim); }
+
+  .channel-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+
+  .channel-list::-webkit-scrollbar { width: 6px; }
+  .channel-list::-webkit-scrollbar-track { background: var(--bg-deep); }
+  .channel-list::-webkit-scrollbar-thumb { background: var(--neon-violet); border-radius: 3px; }
+
+  .channel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: all 0.15s;
+    position: relative;
+  }
+
+  .channel:hover {
+    background: rgba(177, 78, 255, 0.08);
+    border-left-color: var(--neon-violet);
+  }
+
+  .channel.active {
+    background: linear-gradient(90deg, rgba(255, 46, 136, 0.2), transparent);
+    border-left-color: var(--neon-pink);
+  }
+
+  .channel.active::after {
+    content: '▶';
+    position: absolute;
+    right: 16px;
+    color: var(--neon-pink);
+    animation: blink 1s steps(2) infinite;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  .channel-logo {
+    width: 36px;
+    height: 36px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--grid-line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .channel-logo img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  .channel-logo.fallback {
+    font-family: 'VT323', monospace;
+    font-size: 14px;
+    color: var(--neon-cyan);
+  }
+
+  .channel-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .channel-name {
+    font-size: 13px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .channel-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  .channel.fav-toggle {
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 0 4px;
+  }
+
+  .fav-star {
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 4px;
+    font-size: 14px;
+    transition: color 0.2s, transform 0.2s;
+  }
+
+  .fav-star:hover { transform: scale(1.2); }
+  .fav-star.is-fav { color: var(--neon-amber); text-shadow: 0 0 8px var(--neon-amber); }
+
+  .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 0.1em;
+  }
+
+  .loading {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--neon-cyan);
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 0.1em;
+  }
+
+  .loading::after {
+    content: '';
+    display: inline-block;
+    animation: dots 1.5s infinite;
+  }
+
+  @keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+  }
+
+  /* MAIN PLAYER */
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    background: #000;
+  }
+
+  .player-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #video-player {
+    width: 100%;
+    height: 100%;
+    background: #000;
+  }
+
+  /* Radio visualizer */
+  .radio-display {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(ellipse at center, rgba(255, 46, 136, 0.15), transparent 60%),
+      var(--bg-deep);
+    overflow: hidden;
+  }
+
+  .radio-display.active { display: flex; }
+
+  .radio-display::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(transparent 50%, rgba(0, 0, 0, 0.3) 50%);
+    background-size: 100% 4px;
+    pointer-events: none;
+  }
+
+  .radio-station-name {
+    font-family: 'Major Mono Display', monospace;
+    font-size: clamp(28px, 5vw, 56px);
+    color: var(--neon-pink);
+    text-shadow:
+      0 0 20px rgba(255, 46, 136, 0.7),
+      0 0 40px rgba(255, 46, 136, 0.4);
+    letter-spacing: 0.1em;
+    text-align: center;
+    padding: 0 40px;
+    margin-bottom: 30px;
+    z-index: 2;
+  }
+
+  .radio-tags {
+    color: var(--neon-cyan);
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 50px;
+    z-index: 2;
+  }
+
+  .visualizer {
+    width: min(640px, 90%);
+    height: 120px;
+    z-index: 2;
+    display: block;
+  }
+  .visualizer canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    filter: drop-shadow(0 0 6px rgba(255, 46, 136, 0.6));
+  }
+  .visualizer.paused { opacity: 0.3; }
+
+  /* No-selection state */
+  .idle-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 40px;
+    background: var(--bg-deep);
+  }
+
+  .idle-state.hidden { display: none; }
+
+  .idle-state .ascii {
+    font-family: 'VT323', monospace;
+    font-size: 14px;
+    line-height: 1.1;
+    color: var(--neon-violet);
+    white-space: pre;
+    margin-bottom: 30px;
+    text-shadow: 0 0 10px rgba(177, 78, 255, 0.5);
+  }
+
+  .idle-state h2 {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 28px;
+    color: var(--neon-cyan);
+    letter-spacing: 0.15em;
+    margin-bottom: 12px;
+    text-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+  }
+
+  .idle-state p {
+    font-size: 13px;
+    color: var(--text-dim);
+    max-width: 400px;
+    line-height: 1.6;
+  }
+
+  /* Now playing bar */
+  .now-playing {
+    height: 80px;
+    border-top: 1px solid var(--grid-line);
+    background: linear-gradient(180deg, var(--bg-card), var(--bg-deep));
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 20px;
+  }
+
+  .np-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .np-logo {
+    width: 50px;
+    height: 50px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--grid-line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .np-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+  .np-text { min-width: 0; flex: 1; }
+
+  .np-title {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    color: var(--neon-pink);
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .np-subtitle {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-top: 2px;
+  }
+
+  .np-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .ctrl-btn {
+    background: transparent;
+    border: 1px solid var(--grid-line);
+    color: var(--text-primary);
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ctrl-btn:hover {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+  }
+
+  .ctrl-btn.play {
+    background: var(--neon-pink);
+    border-color: var(--neon-pink);
+    color: var(--bg-deep);
+    width: 50px;
+    height: 50px;
+  }
+
+  .ctrl-btn.play:hover {
+    box-shadow: 0 0 20px var(--neon-pink);
+  }
+
+  .volume-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-dim);
+  }
+
+  #audio-player { display: none; }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100px;
+    height: 4px;
+    background: var(--bg-elevated);
+    outline: none;
+    border-radius: 2px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--neon-pink);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 8px var(--neon-pink);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--neon-pink);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+
+  /* Error toast */
+  .toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%) translateY(150%);
+    background: var(--bg-elevated);
+    border: 1px solid var(--neon-pink);
+    color: var(--neon-pink);
+    padding: 12px 24px;
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    letter-spacing: 0.05em;
+    z-index: 1000;
+    transition: transform 0.3s;
+    box-shadow: 0 0 20px rgba(255, 46, 136, 0.3);
+    max-width: 80%;
+    text-align: center;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  .search-box select option { background: var(--bg-deep); color: var(--text-primary); }
+
+  /* Custom URL dialog */
+  .custom-dialog {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(7, 5, 13, 0.85);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+  .custom-dialog.open { display: flex; }
+
+  .custom-dialog-box {
+    background: var(--bg-elevated);
+    border: 1px solid var(--neon-cyan);
+    box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
+    padding: 28px 32px;
+    width: min(480px, 92vw);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .custom-dialog-title {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 16px;
+    color: var(--neon-cyan);
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+
+  .custom-dialog-box input {
+    background: var(--bg-deep);
+    border: 1px solid var(--grid-line);
+    color: var(--text-primary);
+    padding: 10px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.2s;
+  }
+  .custom-dialog-box input:focus { border-color: var(--neon-cyan); }
+  .custom-dialog-box input::placeholder { color: var(--text-dim); }
+
+  .custom-dialog-btns {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+
+  .custom-dialog-btns button {
+    background: transparent;
+    border: 1px solid var(--grid-line);
+    color: var(--text-primary);
+    padding: 8px 20px;
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: all 0.2s;
+  }
+  #custom-play {
+    background: var(--neon-pink);
+    border-color: var(--neon-pink);
+    color: var(--bg-deep);
+  }
+  #custom-play:hover { box-shadow: 0 0 16px var(--neon-pink); }
+  #custom-cancel:hover { border-color: var(--text-dim); color: var(--text-dim); }
+  .pl-panel--hidden { display: none; }
+
+  /* Sleep timer dialog */
+  .sleep-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .sleep-opt {
+    background: var(--bg-deep);
+    border: 1px solid var(--grid-line);
+    color: var(--text-primary);
+    padding: 12px 6px;
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: all 0.2s;
+  }
+  .sleep-opt:hover { border-color: var(--neon-cyan); color: var(--neon-cyan); }
+  .sleep-opt.active {
+    background: var(--neon-cyan);
+    color: var(--bg-deep);
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.5);
+  }
+  #sleep-cancel-timer:hover { border-color: var(--neon-pink); color: var(--neon-pink); }
+
+  /* Sleep timer indicator in header */
+  .sleep-indicator {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    color: var(--neon-cyan);
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    letter-spacing: 0.08em;
+    margin-left: 12px;
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+  }
+  .sleep-indicator.active { display: inline-flex; }
+
+  /* Mod Picture-in-Picture — afișăm doar video-ul */
+  body.pip-mode { background: #000; }
+  body.pip-mode header,
+  body.pip-mode aside,
+  body.pip-mode .now-playing,
+  body.pip-mode .idle-state,
+  body.pip-mode .radio-display,
+  body.pip-mode body::before,
+  body.pip-mode body::after { display: none !important; }
+  body.pip-mode .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    grid-template-areas: "main";
+    height: 100vh;
+  }
+  body.pip-mode main { height: 100vh; }
+  body.pip-mode .player-wrap { background: #000; }
+  body.pip-mode #video-player { width: 100%; height: 100%; }
+
+  /* Playlist dialog tabs */
+  .pl-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--grid-line);
+    margin-bottom: 4px;
+  }
+  .pl-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    padding: 8px 20px;
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    cursor: pointer;
+    letter-spacing: 0.08em;
+    transition: all 0.2s;
+    margin-bottom: -1px;
+  }
+  .pl-tab.active { color: var(--neon-cyan); border-bottom-color: var(--neon-cyan); }
+  .pl-tab:hover:not(.active) { color: var(--text-primary); }
+
+  .pl-panel { display: flex; flex-direction: column; gap: 10px; }
+  .custom-dialog-hint { font-size: 11px; color: var(--text-dim); letter-spacing: 0.05em; }
+
+  #pl-load {
+    background: var(--neon-cyan);
+    border-color: var(--neon-cyan);
+    color: var(--bg-deep);
+  }
+  #pl-load:hover { box-shadow: 0 0 16px var(--neon-cyan); }
+
+  /* Hamburger button */
+  .sidebar-toggle {
+    display: none;
+    background: transparent;
+    border: 1px solid var(--grid-line);
+    color: var(--text-primary);
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .sidebar-toggle:hover { border-color: var(--neon-cyan); color: var(--neon-cyan); }
+
+  /* Tableta (601px - 1100px) */
+  @media (max-width: 1100px) {
+    .app { grid-template-columns: 260px 1fr; }
+    .mode-toggle button { padding: 8px 12px; font-size: 16px; }
+  }
+
+  /* Mobil (max 700px și Portret) — layout stivuit simplu, fara slide */
+  @media (max-width: 700px) and (orientation: portrait) {
+    html, body { overflow-x: hidden; overflow-y: auto; }
+
+    .sidebar-toggle { display: none; }
+    .stats { display: none; }
+    .sleep-indicator { display: none !important; }
+    #fullscreen-btn, #custom-btn { display: none; }
+    .np-controls { gap: 4px; flex-wrap: nowrap; }
+
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto;
+      grid-template-areas: "header" "main" "sidebar";
+      height: auto;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 0 10px;
+      gap: 6px;
+      height: auto;
+      min-height: 52px;
+    }
+    .logo { font-size: 13px; letter-spacing: 0.05em; flex-shrink: 0; }
+
+    .mode-toggle { overflow-x: auto; flex: 1; }
+    .mode-toggle::-webkit-scrollbar { display: none; }
+    .mode-toggle button { padding: 5px 10px; font-size: 13px; white-space: nowrap; }
+
+    main { height: 310px; }
+
+    .now-playing { height: 64px; padding: 0 10px; gap: 8px; }
+    .np-logo { width: 40px; height: 40px; flex-shrink: 0; }
+    .np-title { font-size: 17px; }
+    .np-subtitle { font-size: 10px; }
+    .np-controls { gap: 6px; }
+    .ctrl-btn { width: 36px; height: 36px; font-size: 14px; }
+    .ctrl-btn.play { width: 44px; height: 44px; }
+    input[type="range"] { width: 55px; }
+
+    aside {
+      border-right: none;
+      border-top: 1px solid var(--grid-line);
+      height: 420px;
+      overflow: hidden;
+    }
+
+    .search-box { padding: 10px; }
+    .search-box input, .search-box select { padding: 9px 10px; font-size: 13px; }
+    .channel { padding: 11px 12px; min-height: 50px; }
+    .channel-logo { width: 36px; height: 36px; }
+    .channel-name { font-size: 13px; }
+  }
+
+  /* TV / ecrane mari (min 950px) */
+  @media (min-width: 950px) {
+    .app { grid-template-columns: 400px 1fr; grid-template-rows: 80px 1fr; }
+    html, body { font-size: 18px; }
+    header { height: 80px; padding: 0 32px; }
+    .logo { font-size: 28px; }
+    .mode-toggle button { font-size: 22px; padding: 10px 28px; }
+    .stats { font-size: 18px; }
+
+    .search-box input, .search-box select { font-size: 15px; padding: 12px 14px; }
+    .channel { padding: 14px 20px; }
+    .channel-logo { width: 48px; height: 48px; }
+    .channel-name { font-size: 16px; }
+    .channel-meta { font-size: 14px; }
+
+    .now-playing { height: 100px; padding: 0 32px; }
+    .np-logo { width: 64px; height: 64px; }
+    .np-title { font-size: 32px; }
+    .np-subtitle { font-size: 14px; }
+    .ctrl-btn { width: 56px; height: 56px; font-size: 22px; }
+    .ctrl-btn.play { width: 72px; height: 72px; font-size: 28px; }
+    input[type="range"] { width: 160px; }
+
+    /* Focus vizibil pentru telecomanda TV */
+    .channel:focus, .ctrl-btn:focus, .mode-toggle button:focus {
+      outline: 3px solid var(--neon-cyan);
+      outline-offset: 2px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="scanlines"></div>
+<div class="app">
+  <header>
+    <div class="logo">TANNYRADIO</div>
+    <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Deschide meniu">☰</button>
+    <div class="mode-toggle">
+      <button type="button" id="mode-tv" class="active">TV</button>
+      <button type="button" id="mode-radio">RADIO</button>
+      <button type="button" id="mode-playlist">PLAYLIST</button>
+      <button type="button" id="mode-fav">FAVORITE</button>
+      <button type="button" id="mode-recent">RECENT</button>
+    </div>
+    <div class="stats">CH: <span id="stat-count">0</span> · <span id="stat-mode">TV</span></div>
+    <div class="sleep-indicator" id="sleep-indicator">⏰ <span id="sleep-remaining">--:--</span></div>
+  </header>
+
+  <div class="main-container">
+    <aside>
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="// caută canal sau stație..."
+          autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
+          inputmode="search">
+        <select id="filter-select" title="Filtrează după țară" aria-label="Filtrează după țară">
+          <option value="">// toate țările</option>
+        </select>
+      </div>
+      <div class="channel-list" id="channel-list">
+        <div class="loading">Se încarcă</div>
+      </div>
+    </aside>
+
+    <main>
+    <div class="player-wrap">
+      <video id="video-player" controls muted></video>
+      <audio id="audio-player"></audio>
+
+      <div class="radio-display" id="radio-display">
+        <div class="radio-station-name" id="radio-name">SELECT STATION</div>
+        <div class="radio-tags" id="radio-tags"></div>
+        <div class="visualizer" id="visualizer">
+          <canvas id="viz-canvas" width="640" height="120"></canvas>
+        </div>
+      </div>
+
+      <div class="idle-state" id="idle-state">
+        <pre class="ascii">  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  █                   █
+  █   ◉  ◉  ◉  ◉  ◉   █
+  █                   █
+  █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█
+     ╲             ╱
+      ═══════════</pre>
+        <h2>SIGNAL · STANDBY</h2>
+        <p>Selectează un canal sau o stație din panoul lateral pentru a începe transmisiunea.</p>
+      </div>
+    </div>
+
+    <div class="now-playing">
+      <div class="np-info">
+        <div class="np-logo" id="np-logo">—</div>
+        <div class="np-text">
+          <div class="np-title" id="np-title">NIMIC ÎN REDARE</div>
+          <div class="np-subtitle" id="np-subtitle">aștept semnal...</div>
+        </div>
+      </div>
+      <div class="np-controls">
+        <button class="ctrl-btn" id="prev-btn" type="button" title="Anterior">⏮</button>
+        <button class="ctrl-btn play" id="play-btn" type="button">▶</button>
+        <button class="ctrl-btn" id="next-btn" type="button" title="Următorul">⏭</button>
+        <button class="ctrl-btn" id="mute-btn" type="button" title="Mute/Unmute">🔊</button>
+        <button class="ctrl-btn" id="sleep-btn" type="button" title="Sleep timer">⏰</button>
+        <button class="ctrl-btn" id="custom-btn" type="button" title="Redă URL custom">⌨</button>
+        <button class="ctrl-btn" id="fullscreen-btn" type="button" title="Fullscreen">⛶</button>
+        <div class="volume-wrap">
+          <input type="range" id="volume" min="0" max="100" value="80" title="Volum" aria-label="Volum">
+        </div>
+      </div>
+    </div> <!-- end np -->
+  </main>
+</div> <!-- end main-container -->
+</div> <!-- end app -->
+
+<div class="toast" id="toast"></div>
+
+<div class="custom-dialog" id="playlist-dialog" role="dialog" aria-modal="true" aria-label="Import Playlist">
+  <div class="custom-dialog-box">
+    <div class="custom-dialog-title">IMPORT PLAYLIST IPTV</div>
+    <div class="pl-tabs">
+      <button type="button" class="pl-tab active" data-tab="m3u">M3U URL</button>
+      <button type="button" class="pl-tab" data-tab="xtream">Xtream Codes</button>
+    </div>
+    <div id="pl-tab-m3u" class="pl-panel">
+      <input type="url" id="pl-m3u-url" placeholder="http://server.com/get.php?username=X&password=Y&type=m3u" autocomplete="off">
+      <div class="custom-dialog-hint">Introdu URL-ul M3U primit de la furnizorul tău IPTV</div>
+    </div>
+    <div id="pl-tab-xtream" class="pl-panel pl-panel--hidden">
+      <input type="url" id="pl-xt-server" placeholder="http://server.com:port" autocomplete="off">
+      <input type="text" id="pl-xt-user" placeholder="Username" autocomplete="off">
+      <input type="password" id="pl-xt-pass" placeholder="Parolă" autocomplete="off">
+    </div>
+    <div class="custom-dialog-btns">
+      <button type="button" id="pl-cancel">Anulează</button>
+      <button type="button" id="pl-load">⬇ Încarcă</button>
+    </div>
+  </div>
+</div>
+
+<div class="custom-dialog" id="sleep-dialog" role="dialog" aria-modal="true" aria-label="Sleep Timer">
+  <div class="custom-dialog-box">
+    <div class="custom-dialog-title">SLEEP TIMER</div>
+    <div class="custom-dialog-hint" id="sleep-status">Niciun timer activ.</div>
+    <div class="sleep-grid">
+      <button type="button" class="sleep-opt" data-min="15">15 min</button>
+      <button type="button" class="sleep-opt" data-min="30">30 min</button>
+      <button type="button" class="sleep-opt" data-min="45">45 min</button>
+      <button type="button" class="sleep-opt" data-min="60">1 oră</button>
+      <button type="button" class="sleep-opt" data-min="90">1h 30</button>
+      <button type="button" class="sleep-opt" data-min="120">2 ore</button>
+    </div>
+    <div class="custom-dialog-btns">
+      <button type="button" id="sleep-cancel-timer">Anulează timer</button>
+      <button type="button" id="sleep-close">Închide</button>
+    </div>
+  </div>
+</div>
+
+<div class="custom-dialog" id="custom-dialog" role="dialog" aria-modal="true" aria-label="URL Custom">
+  <div class="custom-dialog-box">
+    <div class="custom-dialog-title">REDĂ URL CUSTOM</div>
+    <input type="text" id="custom-name" placeholder="Nume (ex: Antena 1)" autocomplete="off">
+    <input type="url" id="custom-url" placeholder="URL stream (.m3u8, .mp4, radio...)" autocomplete="off">
+    <div class="custom-dialog-btns">
+      <button type="button" id="custom-cancel">Anulează</button>
+      <button type="button" id="custom-play">▶ Redă</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============= STATE =============
+const TV_COUNTRIES = [
+  {code:'ro',name:'🇷🇴 Romania'}, {code:'md',name:'🇲🇩 Moldova'},
+  {code:'us',name:'🇺🇸 USA'}, {code:'gb',name:'🇬🇧 UK'},
+  {code:'de',name:'🇩🇪 Germany'}, {code:'fr',name:'🇫🇷 France'},
+  {code:'it',name:'🇮🇹 Italy'}, {code:'es',name:'🇪🇸 Spain'},
+  {code:'tr',name:'🇹🇷 Turkey'}, {code:'nl',name:'🇳🇱 Netherlands'},
+  {code:'hu',name:'🇭🇺 Hungary'}, {code:'bg',name:'🇧🇬 Bulgaria'},
+  {code:'rs',name:'🇷🇸 Serbia'}, {code:'pl',name:'🇵🇱 Poland'},
+  {code:'in',name:'🇮🇳 India'}, {code:'br',name:'🇧🇷 Brazil'},
+  {code:'ar',name:'🇦🇷 Argentina'}, {code:'mx',name:'🇲🇽 Mexico'},
+  {code:'jp',name:'🇯🇵 Japan'}, {code:'kr',name:'🇰🇷 Korea'},
+];
+
+const state = {
+  mode: 'tv',           // 'tv' | 'radio' | 'playlist' | 'fav'
+  tvList: [],
+  tvCache: {},
+  currentTvCountry: 'ro',
+  radioList: [],
+  radioCache: {},
+  currentRadioCountry: 'RO',
+  playlistList: [],
+  playlistName: 'Playlist',
+  filtered: [],
+  currentIndex: -1,
+  current: null,
+  favorites: JSON.parse(localStorage.getItem('broadcast-favs') || '{"tv":[],"radio":[]}'),
+  recent: JSON.parse(localStorage.getItem('broadcast-recent') || '[]'),
+  hls: null,
+  sleepTimer: null,    // ID setTimeout pentru oprirea redării
+  sleepTick: null,     // ID setInterval pentru indicator
+  sleepEndsAt: 0,      // timestamp ms
+};
+
+const MAX_RECENT = 30;
+
+function pushRecent(item, type) {
+  const entry = {
+    id: item.id, name: item.name, url: item.url,
+    logo: item.logo || '', country: item.country || '',
+    tags: item.tags || '', bitrate: item.bitrate || 0,
+    _type: type, at: Date.now()
+  };
+  // Dedup după id
+  state.recent = [entry, ...state.recent.filter(r => r.id !== entry.id)].slice(0, MAX_RECENT);
+  localStorage.setItem('broadcast-recent', JSON.stringify(state.recent));
+}
+
+const $ = id => document.getElementById(id);
+const video = $('video-player');
+const audio = $('audio-player');
+
+// playsinline needed for iOS Safari — set via JS to avoid linter warnings
+video.setAttribute('playsinline', '');
+
+// ============= AUDIO VISUALIZER (Web Audio API) =============
+const Viz = (() => {
+  const canvas = $('viz-canvas');
+  const ctx = canvas.getContext('2d');
+  let audioCtx = null;
+  let analyser = null;
+  let source = null;
+  let rafId = null;
+  let fakePhase = 0;
+  let mode = 'fake'; // 'real' | 'fake'
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth || 640;
+    const h = canvas.clientHeight || 120;
+    canvas.width  = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+
+  function attach(mediaEl) {
+    try {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) { mode = 'fake'; return; }
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      // O singură MediaElementSource per element — refolosim
+      if (!mediaEl._vizSource) {
+        try {
+          mediaEl._vizSource = audioCtx.createMediaElementSource(mediaEl);
+        } catch (e) {
+          // CORS sau alt blocaj — fallback la fake bars
+          mode = 'fake';
+          return;
+        }
+      }
+      if (source && source !== mediaEl._vizSource) {
+        try { source.disconnect(); } catch (_) {}
+      }
+      source = mediaEl._vizSource;
+
+      if (!analyser) {
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 128;
+        analyser.smoothingTimeConstant = 0.78;
+      }
+      source.disconnect();
+      source.connect(analyser);
+      source.connect(audioCtx.destination);
+      mode = 'real';
+    } catch (_) {
+      mode = 'fake';
+    }
+  }
+
+  function drawBars(values, paused) {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+    const n = values.length;
+    const gap = 3;
+    const barW = (w - (n - 1) * gap) / n;
+    for (let i = 0; i < n; i++) {
+      const v = paused ? 0.04 : values[i];
+      const barH = Math.max(2, v * h);
+      const x = i * (barW + gap);
+      const y = h - barH;
+      const grad = ctx.createLinearGradient(0, y, 0, h);
+      grad.addColorStop(0, '#ff2e88');
+      grad.addColorStop(0.5, '#b14eff');
+      grad.addColorStop(1, '#00f0ff');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, y, barW, barH);
+      // Vârf strălucitor
+      ctx.fillStyle = '#ffb627';
+      ctx.fillRect(x, y, barW, Math.max(1, barH * 0.04));
+    }
+  }
+
+  function loop() {
+    const paused = $('visualizer').classList.contains('paused');
+    let values;
+    if (mode === 'real' && analyser) {
+      const buf = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(buf);
+      // Reducem la 32 bare
+      const target = 32;
+      values = new Array(target);
+      const step = Math.floor(buf.length / target);
+      for (let i = 0; i < target; i++) {
+        let sum = 0;
+        for (let j = 0; j < step; j++) sum += buf[i * step + j];
+        values[i] = (sum / step) / 255;
+      }
+    } else {
+      // Fallback: animație sinus dacă CORS blochează capturarea
+      fakePhase += 0.08;
+      values = new Array(32);
+      for (let i = 0; i < 32; i++) {
+        const base = paused ? 0.05 : 0.4;
+        const amp  = paused ? 0   : 0.5;
+        values[i] = base + amp * Math.abs(Math.sin(fakePhase + i * 0.35));
+      }
+    }
+    drawBars(values, paused);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function start() {
+    resize();
+    if (rafId == null) loop();
+  }
+
+  function stop() {
+    if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  return { attach, start, stop, resize };
+})();
+
+// ============= ANDROID BRIDGE =============
+const Bridge = {
+  notifyPlaying(item, isTv) {
+    try {
+      const subtitle = (item.country || '') + (item.bitrate ? ` · ${item.bitrate}kbps` : '');
+      window.AndroidBridge?.notifyPlaying(item.name || '', subtitle, !!isTv);
+    } catch (_) {}
+  },
+  notifyPaused() {
+    try { window.AndroidBridge?.notifyPaused(); } catch (_) {}
+  },
+  notifyStopped() {
+    try { window.AndroidBridge?.notifyStopped(); } catch (_) {}
+  }
+};
+
+// ============= TOAST =============
+let toastTimer;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ============= DATA LOADING =============
+function parseM3U(text) {
+  const lines = text.split('\n');
+  const list = [];
+  let meta = null;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith('#EXTINF:')) {
+      meta = line;
+    } else if (meta && line && !line.startsWith('#')) {
+      const name  = (meta.match(/,(.+)$/)             || [])[1]?.trim() || 'Unknown';
+      const logoRaw = (meta.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
+      const logo  = (logoRaw === 'null' || logoRaw === 'N/A') ? '' : logoRaw;
+      const ctry  = (meta.match(/tvg-country="([^"]*)"/) || [])[1] || state.currentTvCountry.toUpperCase();
+      const id    = (meta.match(/tvg-id="([^"]*)"/)   || [])[1] || (name + '_' + list.length);
+      const group = (meta.match(/group-title="([^"]*)"/) || [])[1] || '';
+      list.push({ id, name, url: line, logo, country: ctry, categories: group ? [group] : [] });
+      meta = null;
+    }
+  }
+  return list;
+}
+
+async function loadTV(country) {
+  country = country || state.currentTvCountry;
+  if (state.tvCache[country]) {
+    state.tvList = state.tvCache[country];
+    return state.tvList;
+  }
+  try {
+    const res = await fetch(`https://iptv-org.github.io/iptv/countries/${country}.m3u`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = parseM3U(await res.text());
+    state.tvCache[country] = list;
+    state.tvList = list;
+    return list;
+  } catch (e) {
+    console.error(e);
+    toast(`Eroare la încărcarea TV pentru ${country.toUpperCase()}`);
+    return [];
+  }
+}
+
+// Mapare cod ISO 2-litere → nume complet țară pentru endpoint-ul bycountry (fallback)
+const COUNTRY_FULL = {
+  RO: 'Romania', MD: 'Moldova', US: 'United States of America', GB: 'United Kingdom',
+  DE: 'Germany', FR: 'France', IT: 'Italy', ES: 'Spain', TR: 'Turkey',
+  NL: 'The Netherlands', HU: 'Hungary', BG: 'Bulgaria', RS: 'Serbia', PL: 'Poland',
+  IN: 'India', BR: 'Brazil', AR: 'Argentina', MX: 'Mexico', JP: 'Japan', KR: 'South Korea',
+};
+
+function mapStations(data, country) {
+  return data
+    .filter(s => s.url_resolved && s.name)
+    .map(s => ({
+      id: s.stationuuid,
+      name: s.name.trim(),
+      url: s.url_resolved,
+      country: s.countrycode || country,
+      logo: (s.favicon && s.favicon !== 'null') ? s.favicon : '',
+      tags: s.tags,
+      bitrate: s.bitrate,
+    }));
+}
+
+function dedupStations(list) {
+  const seen = new Set();
+  return list.filter(s => {
+    const key = (s.name + '|' + s.url).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function loadRadio(country) {
+  country = (country || state.currentRadioCountry).toUpperCase();
+  const cacheKey = country;
+  if (state.radioCache[cacheKey]) {
+    state.radioList = state.radioCache[cacheKey];
+    return state.radioList;
+  }
+  const servers = [
+    'all.api.radio-browser.info',
+    'de1.api.radio-browser.info',
+    'fi1.api.radio-browser.info',
+    'nl1.api.radio-browser.info',
+    'at1.api.radio-browser.info',
+  ];
+  const fullName = COUNTRY_FULL[country] || country;
+  // Două query-uri în paralel: by code exact + by country name complet.
+  // hidebroken=false ca să nu pierdem stații marcate fals-pozitiv ca broken.
+  // Nu mai filtrăm după clickcount (pierde stații mai mici, dar valide).
+  for (const server of servers) {
+    try {
+      const base = `https://${server}/json/stations`;
+      const params = `limit=2000&hidebroken=false&order=clickcount`;
+      const [r1, r2] = await Promise.all([
+        fetch(`${base}/bycountrycodeexact/${country}?${params}`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${base}/bycountry/${encodeURIComponent(fullName)}?${params}`).then(r => r.ok ? r.json() : []).catch(() => [])
+      ]);
+      const combined = [...r1, ...r2];
+      if (!combined.length) continue;
+      const list = dedupStations(mapStations(combined, country));
+      // sortare alfabetică case-insensitive
+      list.sort((a, b) => a.name.localeCompare(b.name, 'ro', { sensitivity: 'base' }));
+      state.radioCache[cacheKey] = list;
+      state.radioList = list;
+      return list;
+    } catch (_) { continue; }
+  }
+  toast(`Eroare la încărcarea radio pentru ${country}`);
+  return [];
+}
+
+// ============= RENDER =============
+function getCurrentSource() {
+  if (state.mode === 'tv') return state.tvList;
+  if (state.mode === 'radio') return state.radioList;
+  if (state.mode === 'playlist') return state.playlistList;
+  if (state.mode === 'fav') {
+    const favTv = state.tvList.filter(c => state.favorites.tv.includes(c.id));
+    const favRadio = state.radioList.filter(c => state.favorites.radio.includes(c.id));
+    return [...favTv.map(c => ({...c, _type:'tv'})), ...favRadio.map(c => ({...c, _type:'radio'}))];
+  }
+  if (state.mode === 'recent') return state.recent;
+  return [];
+}
+
+function applyFilter() {
+  const search = $('search-input').value.toLowerCase().trim();
+  let list = getCurrentSource();
+  // TV and radio load per-country; playlist filters by group; fav filters by country
+  const dropVal = $('filter-select').value;
+  if (state.mode === 'playlist' && dropVal) {
+    list = list.filter(c => c.categories.includes(dropVal));
+  } else if (state.mode === 'fav' && dropVal) {
+    list = list.filter(c => c.country === dropVal);
+  } else if (state.mode === 'recent' && dropVal) {
+    list = list.filter(c => c._type === dropVal);
+  }
+  if (search) list = list.filter(c => c.name.toLowerCase().includes(search));
+  state.filtered = list;
+  renderList();
+}
+
+function renderList() {
+  const list = $('channel-list');
+  $('stat-count').textContent = state.filtered.length;
+
+  if (!state.filtered.length) {
+    list.innerHTML = '<div class="empty-state">// nimic găsit</div>';
+    return;
+  }
+
+  // Only fav mode uses the dropdown as a post-load filter
+  if (state.mode === 'fav') {
+    const select = $('filter-select');
+    if (select.options.length <= 1) {
+      const countries = [...new Set(getCurrentSource().map(c => c.country))].filter(Boolean).sort();
+      select.innerHTML = '<option value="">// toate</option>' +
+        countries.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+  }
+
+  const searchTerm = $('search-input').value.trim();
+  // Păstrăm poziția scroll-ului listei când user-ul continuă să tasteze
+  const savedScroll = searchTerm ? list.scrollTop : 0;
+
+  // Render up to 500 items for performance
+  const items = state.filtered.slice(0, 500);
+  list.innerHTML = items.map((c, i) => {
+    const isActive = state.current && state.current.id === c.id;
+    const type = c._type || state.mode;
+    const isFav = state.favorites[type]?.includes(c.id);
+    const fb = escapeHtml((c.name[0]||'?').toUpperCase());
+    const validLogo = c.logo && c.logo !== 'null' && c.logo !== 'N/A' ? c.logo : '';
+    const logoHtml = validLogo
+      ? `<img src="${escapeHtml(validLogo)}" alt="" loading="lazy" decoding="async" onerror="var p=this.parentNode;p.classList.add('fallback');p.textContent=p.dataset.fb;">`
+      : `<span>${fb}</span>`;
+    const meta = type === 'radio'
+      ? `${c.country} · ${c.bitrate || 0}kbps`
+      : c.country;
+    return `
+      <div class="channel ${isActive?'active':''}" data-idx="${i}">
+        <div class="channel-logo ${c.logo?'':'fallback'}" data-fb="${fb}">${logoHtml}</div>
+        <div class="channel-info">
+          <div class="channel-name">${escapeHtml(c.name)}</div>
+          <div class="channel-meta">${escapeHtml(meta)}</div>
+        </div>
+        <span class="fav-star ${isFav?'is-fav':''}" data-fav="${i}" data-type="${type}">★</span>
+      </div>
+    `;
+  }).join('');
+
+  requestAnimationFrame(() => {
+    if (searchTerm) {
+      list.scrollTop = savedScroll;
+    } else {
+      const activeEl = list.querySelector('.channel.active');
+      if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    list.querySelectorAll('.channel').forEach(el => {
+      el.setAttribute('tabindex', '0');
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.click(); });
+    });
+  });
+}
+
+function escapeHtml(s) {
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============= PLAYBACK =============
+function stopAll() {
+  if (state.hls) { state.hls.destroy(); state.hls = null; }
+  video.pause(); video.removeAttribute('src'); video.load();
+  audio.pause(); audio.removeAttribute('src');
+}
+
+// Expus pentru notificarea media (apelat din Kotlin)
+window.__broadcastStop = function () {
+  stopAll();
+  Viz.stop();
+  state.current = null;
+  $('idle-state').classList.remove('hidden');
+  $('np-title').textContent = 'NIMIC ÎN REDARE';
+  $('np-subtitle').textContent = 'aștept semnal...';
+  $('np-logo').textContent = '—';
+  $('play-btn').textContent = '▶';
+  $('visualizer')?.classList.add('paused');
+  $('radio-display')?.classList.remove('active');
+  Bridge.notifyStopped();
+  renderList();
+};
+
+window.__broadcastNext = function () {
+  if (!state.filtered.length) return;
+  const idx = state.current ? state.filtered.findIndex(i => i.id === state.current.id) : -1;
+  const next = state.filtered[Math.min(idx + 1, state.filtered.length - 1)];
+  if (next) play(next);
+};
+
+window.__broadcastPrev = function () {
+  if (!state.filtered.length) return;
+  const idx = state.current ? state.filtered.findIndex(i => i.id === state.current.id) : 0;
+  const prev = state.filtered[Math.max(idx - 1, 0)];
+  if (prev) play(prev);
+};
+
+function play(item) {
+  stopAll();
+  state.current = item;
+  $('idle-state').classList.add('hidden');
+  $('np-title').textContent = item.name;
+  $('np-subtitle').textContent = item.country + (item.bitrate ? ` · ${item.bitrate}kbps` : '');
+  const npLogo = $('np-logo');
+  const npFb = (item.name[0]||'?').toUpperCase();
+  npLogo.innerHTML = '';
+  if (item.logo && item.logo !== 'null' && item.logo !== 'N/A') {
+    const img = document.createElement('img');
+    img.src = item.logo;
+    img.alt = '';
+    img.onerror = () => { npLogo.textContent = npFb; };
+    npLogo.appendChild(img);
+  } else {
+    npLogo.textContent = npFb;
+  }
+
+  const itemType = item._type || state.mode;
+
+  if (itemType === 'tv') {
+    video.style.display = 'block';
+    $('radio-display').classList.remove('active');
+    playTV(item);
+  } else {
+    video.style.display = 'none';
+    $('radio-display').classList.add('active');
+    $('radio-name').textContent = item.name;
+    $('radio-tags').textContent = item.tags || '';
+    playRadio(item);
+  }
+
+  $('play-btn').textContent = '⏸';
+  Bridge.notifyPlaying(item, itemType === 'tv');
+  pushRecent(item, itemType);
+  renderList();
+}
+
+function playTV(item) {
+  const url = item.url;
+  if (Hls.isSupported() && url.includes('.m3u8')) {
+    state.hls = new Hls({ enableWorker: true, xhrSetup: xhr => { xhr.timeout = 10000; } });
+    state.hls.loadSource(url);
+    state.hls.attachMedia(video);
+    let retried = false;
+    state.hls.on(Hls.Events.ERROR, (_, data) => {
+      if (data.fatal) {
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !retried) {
+          retried = true;
+          state.hls.startLoad();
+        } else {
+          toast(`Stream indisponibil: ${item.name}`);
+        }
+      }
+    });
+    video.play().catch(()=>{});
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = url;
+    video.play().catch(()=>{});
+  } else {
+    video.src = url;
+    video.play().catch(() => toast(`Format neacceptat de browser`));
+  }
+}
+
+function playRadio(item) {
+  audio.crossOrigin = 'anonymous'; // necesar pentru Web Audio analyser; fallback grațios dacă serverul nu permite
+  audio.src = item.url;
+  audio.volume = $('volume').value / 100;
+  audio.play()
+    .then(() => {
+      $('visualizer').classList.remove('paused');
+      Viz.attach(audio);
+      Viz.start();
+    })
+    .catch(() => {
+      toast(`Stație indisponibilă: ${item.name}`);
+      $('visualizer').classList.add('paused');
+    });
+}
+
+// ============= PLAYLIST IMPORT =============
+const CORS_PROXY = 'https://corsproxy.io/?';
+
+async function fetchWithProxy(url) {
+  try {
+    const res = await fetch(url);
+    if (res.ok) return res;
+  } catch (_) {}
+  return fetch(CORS_PROXY + encodeURIComponent(url));
+}
+
+async function loadPlaylistFromUrl(m3uUrl) {
+  const res = await fetchWithProxy(m3uUrl);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return parseM3U(await res.text());
+}
+
+// Playlist dialog tab switching
+document.querySelectorAll('.pl-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.pl-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.pl-panel').forEach(p => p.classList.add('pl-panel--hidden'));
+    btn.classList.add('active');
+    $('pl-tab-' + btn.dataset.tab).classList.remove('pl-panel--hidden');
+  });
+});
+
+$('mode-playlist').addEventListener('click', () => {
+  if (state.playlistList.length) {
+    switchMode('playlist');
+  } else {
+    $('playlist-dialog').classList.add('open');
+    $('pl-m3u-url').focus();
+  }
+});
+
+$('pl-cancel').addEventListener('click', () => $('playlist-dialog').classList.remove('open'));
+$('playlist-dialog').addEventListener('click', e => {
+  if (e.target === $('playlist-dialog')) $('playlist-dialog').classList.remove('open');
+});
+
+$('pl-load').addEventListener('click', async () => {
+  const activeTab = document.querySelector('.pl-tab.active')?.dataset.tab;
+  let m3uUrl = '';
+
+  if (activeTab === 'xtream') {
+    const server = $('pl-xt-server').value.trim().replace(/\/$/, '');
+    const user   = $('pl-xt-user').value.trim();
+    const pass   = $('pl-xt-pass').value.trim();
+    if (!server || !user || !pass) { toast('Completează toate câmpurile Xtream'); return; }
+    m3uUrl = `${server}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=ts`;
+    state.playlistName = new URL(server).hostname;
+  } else {
+    m3uUrl = $('pl-m3u-url').value.trim();
+    if (!m3uUrl) { toast('Introdu URL-ul M3U'); return; }
+    try { state.playlistName = new URL(m3uUrl).hostname; } catch(_) { state.playlistName = 'Playlist'; }
+  }
+
+  $('pl-load').textContent = '⏳ Se încarcă...';
+  $('pl-load').disabled = true;
+
+  try {
+    const list = await loadPlaylistFromUrl(m3uUrl);
+    if (!list.length) throw new Error('Lista goală sau format invalid');
+    state.playlistList = list;
+    $('playlist-dialog').classList.remove('open');
+    $('mode-playlist').textContent = `${state.playlistName.toUpperCase().slice(0,12)}`;
+    switchMode('playlist');
+  } catch(e) {
+    toast(`Eroare: ${e.message}`);
+  } finally {
+    $('pl-load').textContent = '⬇ Încarcă';
+    $('pl-load').disabled = false;
+  }
+});
+
+// ============= EVENTS =============
+$('mode-tv').addEventListener('click', () => switchMode('tv'));
+$('mode-radio').addEventListener('click', () => switchMode('radio'));
+$('mode-fav').addEventListener('click', () => switchMode('fav'));
+$('mode-recent').addEventListener('click', () => switchMode('recent'));
+
+async function switchMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll('.mode-toggle button').forEach(b => b.classList.remove('active'));
+  $('mode-' + mode).classList.add('active');
+  $('stat-mode').textContent = mode.toUpperCase();
+  $('search-input').value = '';
+  $('channel-list').innerHTML = '<div class="loading">Se încarcă</div>';
+
+  if (mode === 'tv') {
+    $('filter-select').innerHTML = TV_COUNTRIES
+      .map(c => `<option value="${c.code}" ${c.code === state.currentTvCountry ? 'selected' : ''}>${c.name}</option>`)
+      .join('');
+    await loadTV(state.currentTvCountry);
+  } else if (mode === 'radio') {
+    $('filter-select').innerHTML = TV_COUNTRIES
+      .map(c => `<option value="${c.code.toUpperCase()}" ${c.code.toUpperCase() === state.currentRadioCountry ? 'selected' : ''}>${c.name}</option>`)
+      .join('');
+    await loadRadio(state.currentRadioCountry);
+  } else if (mode === 'playlist') {
+    const groups = [...new Set(state.playlistList.flatMap(c => c.categories))].filter(Boolean).sort();
+    $('filter-select').innerHTML = '<option value="">// toate grupurile</option>' +
+      groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+  } else if (mode === 'recent') {
+    $('filter-select').innerHTML = '<option value="">// tv + radio</option>' +
+      '<option value="tv">// doar TV</option>' +
+      '<option value="radio">// doar radio</option>';
+  } else {
+    $('filter-select').innerHTML = '<option value="">// toate</option>';
+  }
+  applyFilter();
+}
+
+// ============= FIX SAMSUNG IME REVERSED TEXT =============
+// Pe Samsung WebView, GBoard plasează cursorul ÎNAINTE de textul composing
+// (newCursorPosition=0) → fiecare literă se inserează înainte → "radio" devine "oidar".
+// Fix JS: la compositionend știm textul CORECT din e.data; dacă inputul are versiunea
+// inversată, o înlocuim direct.
+(function() {
+  const inp = $('search-input');
+  let _compData = '';
+
+  inp.addEventListener('compositionstart', () => { _compData = ''; });
+  inp.addEventListener('compositionupdate', (e) => { _compData = e.data || ''; });
+  inp.addEventListener('compositionend', (e) => {
+    const correct = e.data || _compData;
+    _compData = '';
+    if (!correct) return;
+    const reversed = correct.split('').reverse().join('');
+    // Dacă inputul se termină cu versiunea inversată, o corectăm
+    if (reversed !== correct && inp.value.endsWith(reversed)) {
+      inp.value = inp.value.slice(0, -reversed.length) + correct;
+    }
+  });
+})();
+
+// Polling — citim valoarea reală din DOM (după fix-ul de mai sus)
+let _lastSearchVal = '';
+setInterval(() => {
+  const val = $('search-input').value;
+  if (val !== _lastSearchVal) {
+    _lastSearchVal = val;
+    applyFilter();
+  }
+}, 150);
+
+$('filter-select').addEventListener('change', async () => {
+  const val = $('filter-select').value;
+  if (state.mode === 'tv') {
+    state.currentTvCountry = val;
+    $('search-input').value = '';
+    $('channel-list').innerHTML = '<div class="loading">Se încarcă</div>';
+    await loadTV(val);
+  } else if (state.mode === 'radio') {
+    state.currentRadioCountry = val.toUpperCase();
+    $('search-input').value = '';
+    $('channel-list').innerHTML = '<div class="loading">Se încarcă</div>';
+    await loadRadio(val);
+  }
+  // playlist and fav: just re-filter without fetching
+  applyFilter();
+});
+
+$('channel-list').addEventListener('click', (e) => {
+  const fav = e.target.closest('[data-fav]');
+  if (fav) {
+    e.stopPropagation();
+    const idx = parseInt(fav.dataset.fav);
+    const type = fav.dataset.type;
+    const item = state.filtered[idx];
+    if (!item) return;
+    const arr = state.favorites[type] = state.favorites[type] || [];
+    const pos = arr.indexOf(item.id);
+    if (pos >= 0) arr.splice(pos, 1);
+    else arr.push(item.id);
+    localStorage.setItem('broadcast-favs', JSON.stringify(state.favorites));
+    fav.classList.toggle('is-fav');
+    if (state.mode === 'fav') applyFilter();
+    return;
+  }
+
+  const ch = e.target.closest('.channel');
+  if (ch) {
+    const idx = parseInt(ch.dataset.idx);
+    const item = state.filtered[idx];
+    if (item) play(item);
+  }
+});
+
+$('play-btn').addEventListener('click', () => {
+  if (!state.current) { toast('Selectează ceva mai întâi'); return; }
+  const isTv = (state.current._type || state.mode) === 'tv';
+  const el = isTv ? video : audio;
+  if (el.paused) {
+    el.play();
+    $('play-btn').textContent = '⏸';
+    $('visualizer')?.classList.remove('paused');
+    Bridge.notifyPlaying(state.current, isTv);
+  } else {
+    el.pause();
+    $('play-btn').textContent = '▶';
+    $('visualizer')?.classList.add('paused');
+    Bridge.notifyPaused();
+  }
+});
+
+$('prev-btn').addEventListener('click', () => window.__broadcastPrev?.());
+$('next-btn').addEventListener('click', () => window.__broadcastNext?.());
+
+// ============= SLEEP TIMER =============
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+function updateSleepIndicator() {
+  if (!state.sleepEndsAt) return;
+  const remainingMs = Math.max(0, state.sleepEndsAt - Date.now());
+  const totalSec = Math.ceil(remainingMs / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  $('sleep-remaining').textContent = `${pad(m)}:${pad(s)}`;
+}
+
+function cancelSleepTimer(silent) {
+  if (state.sleepTimer) { clearTimeout(state.sleepTimer); state.sleepTimer = null; }
+  if (state.sleepTick)  { clearInterval(state.sleepTick); state.sleepTick = null; }
+  state.sleepEndsAt = 0;
+  $('sleep-indicator').classList.remove('active');
+  document.querySelectorAll('.sleep-opt').forEach(b => b.classList.remove('active'));
+  $('sleep-status').textContent = 'Niciun timer activ.';
+  if (!silent) toast('Sleep timer anulat');
+}
+
+function setSleepTimer(minutes) {
+  cancelSleepTimer(true);
+  const ms = minutes * 60 * 1000;
+  state.sleepEndsAt = Date.now() + ms;
+  state.sleepTimer = setTimeout(() => {
+    cancelSleepTimer(true);
+    toast('💤 Sleep timer: oprire redare');
+    window.__broadcastStop?.();
+  }, ms);
+  state.sleepTick = setInterval(updateSleepIndicator, 1000);
+  $('sleep-indicator').classList.add('active');
+  updateSleepIndicator();
+  document.querySelectorAll('.sleep-opt').forEach(b => {
+    b.classList.toggle('active', +b.dataset.min === minutes);
+  });
+  $('sleep-status').textContent = `Activ: oprire în ${minutes} min`;
+  toast(`⏰ Sleep timer setat: ${minutes} min`);
+}
+
+$('sleep-btn').addEventListener('click', () => {
+  $('sleep-dialog').classList.add('open');
+});
+$('sleep-close').addEventListener('click', () => $('sleep-dialog').classList.remove('open'));
+$('sleep-dialog').addEventListener('click', e => {
+  if (e.target === $('sleep-dialog')) $('sleep-dialog').classList.remove('open');
+});
+$('sleep-cancel-timer').addEventListener('click', () => cancelSleepTimer());
+document.querySelectorAll('.sleep-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setSleepTimer(parseInt(btn.dataset.min, 10));
+    setTimeout(() => $('sleep-dialog').classList.remove('open'), 300);
+  });
+});
+
+$('volume').addEventListener('input', (e) => {
+  const v = e.target.value / 100;
+  video.volume = v;
+  audio.volume = v;
+});
+
+$('custom-btn').addEventListener('click', () => {
+  $('custom-dialog').classList.add('open');
+  $('custom-url').focus();
+});
+
+function closeCustomDialog() {
+  $('custom-dialog').classList.remove('open');
+}
+
+$('custom-cancel').addEventListener('click', closeCustomDialog);
+
+$('custom-dialog').addEventListener('click', (e) => {
+  if (e.target === $('custom-dialog')) closeCustomDialog();
+});
+
+$('custom-play').addEventListener('click', () => {
+  const url  = $('custom-url').value.trim();
+  const name = $('custom-name').value.trim() || 'Custom Stream';
+  if (!url) { toast('Introdu un URL valid'); return; }
+  const isRadio = !url.includes('.m3u8') && !url.includes('.mp4') && !url.includes('.ts');
+  const item = { id: 'custom_' + Date.now(), name, url, country: '', logo: '', _type: isRadio ? 'radio' : 'tv' };
+  closeCustomDialog();
+  play(item);
+});
+
+$('custom-url').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('custom-play').click();
+  if (e.key === 'Escape') closeCustomDialog();
+});
+
+$('mute-btn').addEventListener('click', () => {
+  const muted = !video.muted;
+  video.muted = muted;
+  audio.muted = muted;
+  $('mute-btn').textContent = muted ? '🔇' : '🔊';
+});
+
+$('fullscreen-btn').addEventListener('click', () => {
+  const wrap = document.querySelector('.player-wrap');
+  if (!document.fullscreenElement) {
+    (wrap.requestFullscreen || wrap.webkitRequestFullscreen)?.call(wrap);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+  }
+});
+
+document.addEventListener('fullscreenchange', () => {
+  $('fullscreen-btn').textContent = document.fullscreenElement ? '✕' : '⛶';
+});
+
+audio.addEventListener('error', () => {
+  if (state.current && (state.current._type || state.mode) === 'radio') {
+    toast(`Eroare stream radio: ${state.current.name}`);
+    $('visualizer').classList.add('paused');
+  }
+});
+
+video.addEventListener('error', () => {
+  if (state.current && (state.current._type || state.mode) === 'tv' && !state.hls) {
+    toast(`Eroare stream TV: ${state.current.name}`);
+  }
+});
+
+// Unmute on first user interaction (autoplay policy)
+document.addEventListener('click', () => {
+  if (video.muted && state.current && (state.current._type || state.mode) === 'tv') {
+    video.muted = false;
+    $('mute-btn').textContent = '🔊';
+  }
+}, { once: true });
+
+// Tracking manual focus — document.activeElement nu e fiabil pe Android WebView
+let _anyInputFocused = false;
+document.querySelectorAll('input').forEach(inp => {
+  inp.addEventListener('focus', () => { _anyInputFocused = true; });
+  inp.addEventListener('blur',  () => { _anyInputFocused = false; });
+});
+
+// keyboard: space = play/pause, arrows = next/prev
+document.addEventListener('keydown', (e) => {
+  if (_anyInputFocused || document.activeElement.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); $('play-btn').click(); }
+  if (e.code === 'ArrowDown' && state.filtered.length) {
+    const idx = state.current ? state.filtered.findIndex(i => i.id === state.current.id) : -1;
+    const next = state.filtered[Math.min(idx + 1, state.filtered.length - 1)];
+    if (next) play(next);
+  }
+  if (e.code === 'ArrowUp' && state.filtered.length) {
+    const idx = state.current ? state.filtered.findIndex(i => i.id === state.current.id) : 0;
+    const prev = state.filtered[Math.max(idx - 1, 0)];
+    if (prev) play(prev);
+  }
+});
+
+// ============= SIDEBAR TOGGLE (mobil) =============
+// Pe mobil layout-ul e stivuit (header / main / aside), nu drawer.
+// Butonul ☰ doar derulează rapid la lista de canale.
+const sidebarToggleBtn = $('sidebar-toggle');
+const sidebarEl = document.querySelector('aside');
+
+sidebarToggleBtn.addEventListener('click', () => {
+  sidebarEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('search-input').focus({ preventScroll: true });
+});
+
+// ============= INIT =============
+(async () => {
+  try {
+    $('filter-select').innerHTML = TV_COUNTRIES
+      .map(c => `<option value="${c.code}" ${c.code === 'ro' ? 'selected' : ''}>${c.name}</option>`)
+      .join('');
+
+    // Focusăm input-ul de căutare pentru început
+    $('search-input').focus();
+
+    await loadTV('ro');
+    applyFilter();
+
+    // Încercăm focus pe primul element din listă
+    setTimeout(() => {
+      const first = document.querySelector('.channel');
+      if (first) first.focus();
+    }, 1000);
+
+    loadRadio('RO');
+  } catch (e) {
+    console.error("Init error:", e);
+    applyFilter();
+  }
+})();
+</script>
+
+</body>
+</html>
