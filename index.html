@@ -203,6 +203,64 @@
   #genre-select { margin-bottom: 0; }
   #genre-select.genre-hidden { display: none; }
 
+  /* Rând „doar funcționale" (doar în modul TV) */
+  .tv-health-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    font-family: 'VT323', monospace;
+    font-size: 15px;
+    color: var(--text-dim);
+  }
+  .tv-health-row.hidden { display: none; }
+  .ow-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    color: var(--text-primary);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .ow-toggle input { accent-color: var(--neon-cyan); width: 15px; height: 15px; cursor: pointer; }
+  #tv-recheck {
+    background: transparent;
+    border: 1px solid var(--grid-line);
+    color: var(--text-primary);
+    width: 26px; height: 26px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  #tv-recheck:hover { border-color: var(--neon-cyan); color: var(--neon-cyan); transform: rotate(90deg); }
+  #tv-recheck.spinning { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .tv-health-progress {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--neon-cyan);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tv-health-progress.tv-health-done { color: var(--neon-amber); }
+
+  /* Punct de status stream în listă */
+  .ch-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-dim);
+    opacity: 0.35;
+    transition: background 0.3s, opacity 0.3s, box-shadow 0.3s;
+  }
+  .ch-dot.ok   { background: #2ecc71; opacity: 1; box-shadow: 0 0 6px rgba(46, 204, 113, 0.8); }
+  .ch-dot.dead { background: var(--neon-pink); opacity: 0.9; box-shadow: 0 0 5px rgba(255, 46, 136, 0.6); }
+
   .channel-list {
     flex: 1;
     overflow-y: auto;
@@ -404,19 +462,36 @@
     width: 100%;
     height: 100%;
     background: #000;
+    position: relative;
+    z-index: 2;
   }
+
+  /* Fundal dinamic — logo-ul stației, blur mare, în spatele vizualizatorului */
+  .logo-backdrop {
+    position: absolute;
+    inset: -12%;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    filter: blur(64px) brightness(0.35) saturate(1.3);
+    opacity: 0;
+    transform: scale(1.1);
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+  }
+  .logo-backdrop.active { opacity: 1; }
 
   /* Radio visualizer */
   .radio-display {
     position: absolute;
     inset: 0;
+    z-index: 1;
     display: none;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     background:
-      radial-gradient(ellipse at center, rgba(255, 46, 136, 0.15), transparent 60%),
-      var(--bg-deep);
+      radial-gradient(ellipse at center, rgba(255, 46, 136, 0.12), transparent 65%);
     overflow: hidden;
   }
 
@@ -552,7 +627,29 @@
     letter-spacing: 0.05em;
     white-space: nowrap;
     overflow: hidden;
+  }
+  .np-title-txt {
+    display: inline-block;
+    white-space: nowrap;
+    max-width: 100%;
     text-overflow: ellipsis;
+    overflow: hidden;
+    vertical-align: bottom;
+  }
+  /* Marquee ping-pong când numele nu încape */
+  .np-title.marquee { overflow: hidden; }
+  .np-title.marquee .np-title-txt {
+    max-width: none;
+    text-overflow: clip;
+    animation: np-marquee 11s ease-in-out infinite;
+  }
+  @keyframes np-marquee {
+    0%, 12%   { transform: translateX(0); }
+    50%, 62%  { transform: translateX(var(--mq, 0)); }
+    100%      { transform: translateX(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .np-title.marquee .np-title-txt { animation: none; }
   }
 
   .np-subtitle {
@@ -859,7 +956,7 @@
 
     .stats { display: none; }
     .sleep-indicator { display: none !important; }
-    #fullscreen-btn, #custom-btn { display: none; }
+    #custom-btn { display: none; } /* fullscreen rămâne vizibil pe mobil */
 
     .app {
       height: auto;
@@ -978,6 +1075,13 @@
         <select id="genre-select" class="genre-hidden" title="Filtrează după gen" aria-label="Filtrează după gen">
           <option value="">// toate genurile</option>
         </select>
+        <div class="tv-health-row" id="tv-health-row">
+          <label class="ow-toggle">
+            <input type="checkbox" id="only-working-chk"> doar funcționale
+          </label>
+          <button type="button" id="tv-recheck" title="Reverifică canalele">↻</button>
+          <span class="tv-health-progress" id="tv-health-progress"></span>
+        </div>
       </div>
       <div class="channel-list" id="channel-list">
         <div class="loading">Se încarcă</div>
@@ -986,6 +1090,7 @@
 
     <main>
     <div class="player-wrap">
+      <div class="logo-backdrop" id="logo-backdrop"></div>
       <video id="video-player" controls muted controlslist="nofullscreen nodownload noremoteplayback"></video>
       <audio id="audio-player"></audio>
 
@@ -1014,7 +1119,7 @@
       <div class="np-info">
         <div class="np-logo" id="np-logo">—</div>
         <div class="np-text">
-          <div class="np-title" id="np-title">NIMIC ÎN REDARE</div>
+          <div class="np-title" id="np-title"><span class="np-title-txt" id="np-title-txt">NIMIC ÎN REDARE</span></div>
           <div class="np-subtitle" id="np-subtitle">aștept semnal...</div>
         </div>
       </div>
@@ -1092,6 +1197,13 @@
 </div>
 
 <script>
+// ============= SERVICE WORKER (PWA offline) =============
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW register:', e));
+  });
+}
+
 // ============= STATE =============
 const TV_COUNTRIES = [
   {code:'ro',name:'🇷🇴 Romania'}, {code:'md',name:'🇲🇩 Moldova'},
@@ -1117,6 +1229,8 @@ const state = {
   tvList: [],
   tvCache: {},
   currentTvCountry: _lsGet('tr-tv-country', 'ro'),
+  tvHealth: {},         // url -> 'ok' | 'dead' pentru țara curentă
+  tvOnlyWorking: _lsGet('tr-only-working', '1') === '1', // ascunde canale moarte
   radioList: [],
   radioCache: {},
   currentRadioCountry: _lsGet('tr-radio-country', 'RO'),
@@ -1128,6 +1242,7 @@ const state = {
   current: null,
   favorites: JSON.parse(localStorage.getItem('broadcast-favs') || '{"tv":[],"radio":[]}'),
   recent: JSON.parse(localStorage.getItem('broadcast-recent') || '[]'),
+  muted: _lsGet('tr-muted', '0') === '1',  // preferință mute persistată
   hls: null,
   sleepTimer: null,    // ID setTimeout pentru oprirea redării
   sleepTick: null,     // ID setInterval pentru indicator
@@ -1297,14 +1412,61 @@ const Bridge = {
       const subtitle = (item.country || '') + (item.bitrate ? ` · ${item.bitrate}kbps` : '');
       window.AndroidBridge?.notifyPlaying(item.name || '', subtitle, !!isTv);
     } catch (_) {}
+    MediaSess.set(item, isTv);
+    MediaSess.state('playing');
   },
   notifyPaused() {
     try { window.AndroidBridge?.notifyPaused(); } catch (_) {}
+    MediaSess.state('paused');
   },
   notifyStopped() {
     try { window.AndroidBridge?.notifyStopped(); } catch (_) {}
+    MediaSess.state('none');
   }
 };
+
+// ============= MEDIA SESSION (lockscreen / notificare browser) =============
+// Afișează titlu + logo pe ecranul de blocare și rutează butoanele hardware/OS.
+const MediaSess = (() => {
+  const supported = 'mediaSession' in navigator;
+  let wired = false;
+
+  function wire() {
+    if (!supported || wired) return;
+    wired = true;
+    const ms = navigator.mediaSession;
+    const safe = (fn) => { try { fn(); } catch (_) {} };
+    safe(() => ms.setActionHandler('play',  () => $('play-btn').click()));
+    safe(() => ms.setActionHandler('pause', () => $('play-btn').click()));
+    safe(() => ms.setActionHandler('previoustrack', () => window.__broadcastPrev?.()));
+    safe(() => ms.setActionHandler('nexttrack',     () => window.__broadcastNext?.()));
+    safe(() => ms.setActionHandler('stop', () => window.__broadcastStop?.()));
+  }
+
+  function set(item, isTv) {
+    if (!supported) return;
+    wire();
+    const art = [];
+    if (item.logo && item.logo !== 'null' && item.logo !== 'N/A') {
+      art.push({ src: item.logo, sizes: '512x512', type: 'image/png' });
+    }
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: item.name || 'TannyRadio',
+        artist: (item.country || '') + (item.bitrate ? ` · ${item.bitrate}kbps` : (isTv ? ' · TV' : ' · Radio')),
+        album: 'TannyRadio',
+        artwork: art,
+      });
+    } catch (_) {}
+  }
+
+  function state(s) {
+    if (!supported) return;
+    try { navigator.mediaSession.playbackState = s; } catch (_) {}
+  }
+
+  return { set, state };
+})();
 
 // ============= TOAST =============
 let toastTimer;
@@ -1357,6 +1519,146 @@ async function loadTV(country) {
     toast(`Eroare la încărcarea TV pentru ${country.toUpperCase()}`);
     return [];
   }
+}
+
+// ============= VERIFICARE FUNCȚIONALITATE CANALE TV =============
+// Testăm dacă stream-ul răspunde (manifest HLS accesibil). Rezultatele sunt
+// cache-uite 12h în localStorage per țară, ca verificarea să fie instant apoi.
+const HEALTH_TTL = 12 * 3600 * 1000;
+const HEALTH_TIMEOUT = 7000;
+const HEALTH_CONCURRENCY = 6;
+let _healthRun = 0;           // token pentru anularea rulărilor vechi
+let _healthOkCount = 0;       // câte canale confirmate ok în rularea curentă
+const _tvRows = new Map();    // url -> { row, dot } pentru update in-place
+
+function _healthKey(country) { return `tr-tvhealth-${(country || '').toLowerCase()}`; }
+
+function loadHealthCache(country) {
+  try {
+    const raw = localStorage.getItem(_healthKey(country));
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.map) return null;
+    return obj;
+  } catch (_) { return null; }
+}
+
+function saveHealthCache(country) {
+  try {
+    localStorage.setItem(_healthKey(country), JSON.stringify({ ts: Date.now(), map: state.tvHealth }));
+  } catch (_) {}
+}
+
+// Fetch cu timeout via AbortController
+function _fetchTimeout(url, ms, opts) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  return fetch(url, { ...(opts || {}), signal: ac.signal }).finally(() => clearTimeout(t));
+}
+
+// Testează un singur stream. true = pare funcțional.
+async function probeStream(url) {
+  const isHls = url.includes('.m3u8');
+  // 1) Direct — merge dacă serverul trimite CORS
+  try {
+    const res = await _fetchTimeout(url, HEALTH_TIMEOUT);
+    if (res.ok) {
+      if (isHls) { const t = await res.text(); return /#EXTM3U/i.test(t); }
+      return true;
+    }
+  } catch (_) { /* CORS/timeout — încercăm proxy */ }
+
+  // 2) Proxy (server-side) — citim manifestul indiferent de CORS
+  for (const build of CORS_PROXIES.slice(0, 2)) {
+    try {
+      const res = await _fetchTimeout(build(url), HEALTH_TIMEOUT);
+      if (!res.ok) continue;
+      const t = await res.text();
+      if (isHls) return /#EXTM3U/i.test(t);
+      return t != null && t.length > 0;
+    } catch (_) { /* următorul */ }
+  }
+  return false;
+}
+
+// Pool de concurență simplu
+async function _pool(items, worker, concurrency) {
+  let i = 0;
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (i < items.length) {
+      const idx = i++;
+      await worker(items[idx], idx);
+    }
+  });
+  await Promise.all(runners);
+}
+
+function _setDot(url, status) {
+  const entry = _tvRows.get(url);
+  if (!entry) return;
+  if (entry.dot) entry.dot.className = 'ch-dot ' + status;
+  // Ascundem live doar dacă avem deja măcar un canal ok (proxy funcțional)
+  if (state.tvOnlyWorking && status === 'dead' && entry.row && _healthOkCount > 0) {
+    entry.row.style.display = 'none';
+  }
+}
+
+function updateHealthProgress(done, total, phase) {
+  const el = $('tv-health-progress');
+  if (!el) return;
+  if (phase === 'done' || (total > 0 && done >= total)) {
+    const dead = Object.values(state.tvHealth).filter(v => v === 'dead').length;
+    el.textContent = `✓ verificat · ${dead} indisponibile ascunse`;
+    el.classList.add('tv-health-done');
+    setTimeout(() => { el.textContent = ''; el.classList.remove('tv-health-done'); }, 4000);
+  } else {
+    el.classList.remove('tv-health-done');
+    el.textContent = `⧗ verific canale... ${done}/${total}`;
+  }
+}
+
+// Rulează verificarea pentru țara curentă (folosește cache dacă e proaspăt).
+async function runTvHealthCheck(country, force) {
+  country = country || state.currentTvCountry;
+  const list = state.tvCache[country] || state.tvList;
+  if (!list || !list.length) return;
+
+  const cache = loadHealthCache(country);
+  state.tvHealth = (cache && cache.map) ? { ...cache.map } : {};
+  const fresh = cache && (Date.now() - cache.ts < HEALTH_TTL);
+
+  // Aplicăm imediat rezultatele din cache (ascunde morții știuți)
+  if (state.mode === 'tv') applyFilter();
+  if (fresh && !force) { updateHealthProgress(1, 1, 'done'); return; }
+
+  const runId = ++_healthRun;
+  _healthOkCount = Object.values(state.tvHealth).filter(v => v === 'ok').length;
+  const toCheck = list.filter(c => force || !state.tvHealth[c.url]);
+  if (!toCheck.length) { updateHealthProgress(1, 1, 'done'); return; }
+
+  let done = 0;
+  updateHealthProgress(0, toCheck.length);
+  await _pool(toCheck, async (c) => {
+    if (runId !== _healthRun) return; // rulare anulată de una nouă (schimbare țară/mod)
+    const ok = await probeStream(c.url);
+    if (runId !== _healthRun) return;
+    state.tvHealth[c.url] = ok ? 'ok' : 'dead';
+    if (ok) _healthOkCount++;
+    if (state.mode === 'tv') _setDot(c.url, ok ? 'ok' : 'dead');
+    done++;
+    if (done % 6 === 0) { saveHealthCache(country); updateHealthProgress(done, toCheck.length); }
+  }, HEALTH_CONCURRENCY);
+
+  if (runId !== _healthRun) return;
+  saveHealthCache(country);
+  updateHealthProgress(toCheck.length, toCheck.length, 'done');
+  if (state.mode === 'tv') applyFilter();
+}
+
+// Pornește verificarea dacă suntem pe TV și filtrul e activ
+function kickTvHealthCheck(force) {
+  if (state.mode !== 'tv') return;
+  runTvHealthCheck(state.currentTvCountry, force);
 }
 
 // Mapare cod ISO 2-litere → nume complet țară pentru endpoint-ul bycountry (fallback)
@@ -1520,6 +1822,13 @@ function applyFilter() {
     const g = state.radioGenre;
     list = list.filter(c => (c.tags || '').toLowerCase().includes(g));
   }
+  // Doar canale funcționale — ascunde stream-urile confirmate moarte (TV).
+  // Siguranță: dacă filtrul ar goli complet lista (verificare eșuată/proxy picat),
+  // afișăm totuși tot, ca să nu rămână ecranul gol.
+  if (state.mode === 'tv' && state.tvOnlyWorking) {
+    const alive = list.filter(c => state.tvHealth[c.url] !== 'dead');
+    if (alive.length) list = alive;
+  }
   if (search) list = list.filter(c => c.name.toLowerCase().includes(search));
   state.filtered = list;
   renderList();
@@ -1563,6 +1872,7 @@ function renderList() {
 
   // Render up to 500 items for performance
   const items = state.filtered.slice(0, 500);
+  const showDot = state.mode === 'tv';
   list.innerHTML = items.map((c, i) => {
     const isActive = state.current && state.current.id === c.id;
     const type = c._type || state.mode;
@@ -1575,8 +1885,12 @@ function renderList() {
     const meta = type === 'radio'
       ? `${c.country} · ${c.bitrate || 0}kbps`
       : c.country;
+    const dotHtml = showDot
+      ? `<span class="ch-dot ${state.tvHealth[c.url] || ''}" title="stare stream"></span>`
+      : '';
     return `
       <div class="channel ${isActive?'active':''}" data-idx="${i}">
+        ${dotHtml}
         <div class="channel-logo ${c.logo?'':'fallback'}" data-fb="${fb}">${logoHtml}</div>
         <div class="channel-info">
           <div class="channel-name">${escapeHtml(c.name)}</div>
@@ -1586,6 +1900,16 @@ function renderList() {
       </div>
     `;
   }).join('');
+
+  // Reconstruim map-ul url -> rând, pentru update in-place al punctelor de status
+  _tvRows.clear();
+  if (showDot) {
+    const rows = list.querySelectorAll('.channel');
+    items.forEach((c, i) => {
+      const row = rows[i];
+      if (row) _tvRows.set(c.url, { row, dot: row.querySelector('.ch-dot') });
+    });
+  }
 
   requestAnimationFrame(() => {
     if (searchTerm) {
@@ -1605,6 +1929,47 @@ function escapeHtml(s) {
   return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// ============= HELPERE VIZUALE =============
+// Fundal blur din logo-ul stației; ascuns dacă nu există logo valid.
+function setBackdrop(logo) {
+  const bd = $('logo-backdrop');
+  if (!bd) return;
+  const valid = logo && logo !== 'null' && logo !== 'N/A';
+  if (valid) {
+    bd.style.backgroundImage = `url("${logo.replace(/"/g, '%22')}")`;
+    bd.classList.add('active');
+  } else {
+    bd.classList.remove('active');
+    bd.style.backgroundImage = '';
+  }
+}
+
+// Titlu în now-playing cu marquee automat când textul depășește lățimea.
+function setNpTitle(text) {
+  const box = $('np-title');
+  const txt = $('np-title-txt');
+  if (!txt) { box.textContent = text; return; }
+  txt.textContent = text;
+  box.classList.remove('marquee');
+  txt.style.removeProperty('--mq');
+  // Măsurăm după ce s-a randat
+  requestAnimationFrame(() => {
+    const overflow = txt.scrollWidth - box.clientWidth;
+    if (overflow > 8) {
+      txt.style.setProperty('--mq', `-${overflow + 12}px`);
+      box.classList.add('marquee');
+    }
+  });
+}
+
+// Umple slider-ul de volum până la nivelul curent (gradient pe track).
+function setVolumeFill(pct) {
+  const v = $('volume');
+  const p = Math.max(0, Math.min(100, pct));
+  v.style.background =
+    `linear-gradient(90deg, var(--neon-pink) 0%, var(--neon-cyan) ${p}%, var(--bg-elevated) ${p}%)`;
+}
+
 // ============= PLAYBACK =============
 function stopAll() {
   if (state.hls) { state.hls.destroy(); state.hls = null; }
@@ -1618,12 +1983,13 @@ window.__broadcastStop = function () {
   Viz.stop();
   state.current = null;
   $('idle-state').classList.remove('hidden');
-  $('np-title').textContent = 'NIMIC ÎN REDARE';
+  setNpTitle('NIMIC ÎN REDARE');
   $('np-subtitle').textContent = 'aștept semnal...';
   $('np-logo').textContent = '—';
   $('play-btn').textContent = '▶';
   $('visualizer')?.classList.add('paused');
   $('radio-display')?.classList.remove('active');
+  setBackdrop('');
   Bridge.notifyStopped();
   renderList();
 };
@@ -1647,7 +2013,7 @@ function play(item) {
   state.current = item;
   state.pendingResume = false;
   $('idle-state').classList.add('hidden');
-  $('np-title').textContent = item.name;
+  setNpTitle(item.name);
   $('np-subtitle').textContent = item.country + (item.bitrate ? ` · ${item.bitrate}kbps` : '');
   const npLogo = $('np-logo');
   const npFb = (item.name[0]||'?').toUpperCase();
@@ -1661,6 +2027,7 @@ function play(item) {
   } else {
     npLogo.textContent = npFb;
   }
+  setBackdrop(item.logo);
 
   const itemType = item._type || state.mode;
 
@@ -1683,8 +2050,34 @@ function play(item) {
   renderList();
 }
 
+// ---- Auto-skip canale TV moarte ----
+// Sare la următorul stream când unul pică; contorul se resetează la primul
+// canal care chiar pornește (evenimentul 'playing'), sau la selecție manuală.
+const TV_SKIP_LIMIT = 8;
+let _tvSkipCount = 0;
+
+function handleTvFailure(item) {
+  // Doar dacă mai suntem pe același canal TV (nu a schimbat user-ul între timp)
+  if (!state.current || state.current.id !== item.id) return;
+  if ((state.current._type || state.mode) !== 'tv') return;
+
+  if (_tvSkipCount >= TV_SKIP_LIMIT) {
+    _tvSkipCount = 0;
+    toast(`Prea multe canale indisponibile la rând — oprit`);
+    return;
+  }
+  _tvSkipCount++;
+  toast(`⏭ ${item.name} indisponibil — sar la următorul (${_tvSkipCount})`);
+  setTimeout(() => {
+    if (state.current && state.current.id === item.id) window.__broadcastNext?.();
+  }, 900);
+}
+
 function playTV(item) {
   const url = item.url;
+  // Redarea e inițiată de user (click) → politica autoplay permite sunet.
+  // Aplicăm preferința de mute, implicit NEmutat (fix „fără sunet pe PC").
+  video.muted = state.muted;
   if (Hls.isSupported() && url.includes('.m3u8')) {
     state.hls = new Hls({ enableWorker: true, xhrSetup: xhr => { xhr.timeout = 10000; } });
     state.hls.loadSource(url);
@@ -1696,28 +2089,32 @@ function playTV(item) {
           retried = true;
           state.hls.startLoad();
         } else {
-          toast(`Stream indisponibil: ${item.name}`);
+          handleTvFailure(item);
         }
       }
     });
     video.play().catch(()=>{});
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
     video.src = url;
-    video.play().catch(()=>{});
+    video.play().catch(() => handleTvFailure(item));
   } else {
     video.src = url;
-    video.play().catch(() => toast(`Format neacceptat de browser`));
+    video.play().catch(() => handleTvFailure(item));
   }
 }
 
 function playRadio(item) {
-  audio.crossOrigin = 'anonymous'; // necesar pentru Web Audio analyser; fallback grațios dacă serverul nu permite
+  // IMPORTANT: NU folosim crossOrigin + Web Audio pentru captură.
+  // Majoritatea stream-urilor radio nu trimit headere CORS, iar
+  // createMediaElementSource ar reda SILENȚIOS pe desktop Chrome/Edge.
+  // Folosim vizualizatorul „fake" (animat), care nu depinde de CORS → sunet garantat.
+  audio.removeAttribute('crossorigin');
   audio.src = item.url;
   audio.volume = $('volume').value / 100;
+  audio.muted = state.muted;
   audio.play()
     .then(() => {
       $('visualizer').classList.remove('paused');
-      Viz.attach(audio);
       Viz.start();
     })
     .catch(() => {
@@ -1842,12 +2239,18 @@ async function switchMode(mode) {
 
   // Dropdown-ul de gen apare doar în modul radio
   $('genre-select').classList.toggle('genre-hidden', mode !== 'radio');
+  // Rândul „doar funcționale" apare doar în modul TV
+  $('tv-health-row').classList.toggle('hidden', mode !== 'tv');
+  $('only-working-chk').checked = state.tvOnlyWorking;
 
   if (mode === 'tv') {
     $('filter-select').innerHTML = TV_COUNTRIES
       .map(c => `<option value="${c.code}" ${c.code === state.currentTvCountry ? 'selected' : ''}>${c.name}</option>`)
       .join('');
     await loadTV(state.currentTvCountry);
+    applyFilter();
+    kickTvHealthCheck();
+    return;
   } else if (mode === 'radio') {
     $('filter-select').innerHTML = TV_COUNTRIES
       .map(c => `<option value="${c.code.toUpperCase()}" ${c.code.toUpperCase() === state.currentRadioCountry ? 'selected' : ''}>${c.name}</option>`)
@@ -1920,11 +2323,29 @@ $('filter-select').addEventListener('change', async () => {
   }
   // playlist and fav: just re-filter without fetching
   applyFilter();
+  if (state.mode === 'tv') kickTvHealthCheck();
 });
 
 $('genre-select').addEventListener('change', () => {
   state.radioGenre = $('genre-select').value;
   applyFilter();
+});
+
+// „Doar funcționale" — ascunde/arată canalele moarte
+$('only-working-chk').addEventListener('change', (e) => {
+  state.tvOnlyWorking = e.target.checked;
+  try { localStorage.setItem('tr-only-working', state.tvOnlyWorking ? '1' : '0'); } catch (_) {}
+  applyFilter();
+  if (state.tvOnlyWorking) kickTvHealthCheck(); // pornește verificarea dacă nu s-a făcut
+});
+
+// Reverificare forțată (ignoră cache-ul)
+$('tv-recheck').addEventListener('click', async () => {
+  if (state.mode !== 'tv') return;
+  const btn = $('tv-recheck');
+  btn.classList.add('spinning');
+  try { await runTvHealthCheck(state.currentTvCountry, true); }
+  finally { btn.classList.remove('spinning'); }
 });
 
 $('channel-list').addEventListener('click', (e) => {
@@ -1949,7 +2370,7 @@ $('channel-list').addEventListener('click', (e) => {
   if (ch) {
     const idx = parseInt(ch.dataset.idx);
     const item = state.filtered[idx];
-    if (item) play(item);
+    if (item) { _tvSkipCount = 0; play(item); } // selecție manuală → contor auto-skip resetat
   }
 });
 
@@ -2039,6 +2460,7 @@ $('volume').addEventListener('input', (e) => {
   const v = e.target.value / 100;
   video.volume = v;
   audio.volume = v;
+  setVolumeFill(+e.target.value);
   try { localStorage.setItem('tr-volume', e.target.value); } catch (_) {}
 });
 
@@ -2073,24 +2495,37 @@ $('custom-url').addEventListener('keydown', (e) => {
 });
 
 $('mute-btn').addEventListener('click', () => {
-  const muted = !video.muted;
-  video.muted = muted;
-  audio.muted = muted;
-  $('mute-btn').textContent = muted ? '🔇' : '🔊';
-  try { localStorage.setItem('tr-muted', muted ? '1' : '0'); } catch (_) {}
+  state.muted = !state.muted;
+  video.muted = audio.muted = state.muted;
+  $('mute-btn').textContent = state.muted ? '🔇' : '🔊';
+  try { localStorage.setItem('tr-muted', state.muted ? '1' : '0'); } catch (_) {}
 });
 
 $('fullscreen-btn').addEventListener('click', () => {
   const wrap = document.querySelector('.player-wrap');
-  if (!document.fullscreenElement) {
-    (wrap.requestFullscreen || wrap.webkitRequestFullscreen)?.call(wrap);
+  const inFs = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!inFs) {
+    if (wrap.requestFullscreen) {
+      wrap.requestFullscreen().catch(() => {});
+    } else if (wrap.webkitRequestFullscreen) {
+      wrap.webkitRequestFullscreen();
+    } else if (video.webkitEnterFullscreen) {
+      // iOS Safari: fullscreen doar pe elementul <video>
+      video.webkitEnterFullscreen();
+    } else {
+      toast('Fullscreen neacceptat pe acest dispozitiv');
+    }
   } else {
-    (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    if (document.exitFullscreen) document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
   }
 });
 
 document.addEventListener('fullscreenchange', () => {
   $('fullscreen-btn').textContent = document.fullscreenElement ? '✕' : '⛶';
+});
+document.addEventListener('webkitfullscreenchange', () => {
+  $('fullscreen-btn').textContent = document.webkitFullscreenElement ? '✕' : '⛶';
 });
 
 audio.addEventListener('error', () => {
@@ -2102,17 +2537,15 @@ audio.addEventListener('error', () => {
 
 video.addEventListener('error', () => {
   if (state.current && (state.current._type || state.mode) === 'tv' && !state.hls) {
-    toast(`Eroare stream TV: ${state.current.name}`);
+    handleTvFailure(state.current);
   }
 });
 
-// Unmute on first user interaction (autoplay policy)
-document.addEventListener('click', () => {
-  if (video.muted && state.current && (state.current._type || state.mode) === 'tv') {
-    video.muted = false;
-    $('mute-btn').textContent = '🔊';
-  }
-}, { once: true });
+// Canal pornit cu succes → resetăm contorul de auto-skip
+video.addEventListener('playing', () => { _tvSkipCount = 0; });
+
+// (Fostul handler „unmute la primul click" a fost eliminat — acum dezactivăm
+//  mute-ul direct în playTV/playRadio, în cadrul gestului user-ului.)
 
 // Tracking manual focus — document.activeElement nu e fiabil pe Android WebView
 let _anyInputFocused = false;
@@ -2343,16 +2776,12 @@ sidebarToggleBtn.addEventListener('click', () => {
 // Volum + mute salvate din sesiunea anterioară
 (function restorePrefs() {
   const savedVol = _lsGet('tr-volume', null);
-  if (savedVol !== null) {
-    const vv = Math.max(0, Math.min(100, parseInt(savedVol, 10) || 0));
-    $('volume').value = vv;
-    video.volume = audio.volume = vv / 100;
-  }
-  const savedMute = _lsGet('tr-muted', null);
-  if (savedMute === '1') {
-    video.muted = audio.muted = true;
-    $('mute-btn').textContent = '🔇';
-  }
+  const vv = savedVol !== null ? Math.max(0, Math.min(100, parseInt(savedVol, 10) || 0)) : +$('volume').value;
+  $('volume').value = vv;
+  video.volume = audio.volume = vv / 100;
+  setVolumeFill(vv);
+  video.muted = audio.muted = state.muted;
+  $('mute-btn').textContent = state.muted ? '🔇' : '🔊';
 })();
 
 // Pre-încarcă ultimul canal în bara "now playing" (fără autoplay — blocat de browser).
@@ -2364,7 +2793,8 @@ function restoreLastPlayed() {
   state.current = last;
   state.pendingResume = true; // nimic nu e încă încărcat în media element
   $('idle-state').classList.add('hidden');
-  $('np-title').textContent = last.name;
+  setNpTitle(last.name);
+  setBackdrop(last.logo);
   $('np-subtitle').textContent = (last.country || '') + (last.bitrate ? ` · ${last.bitrate}kbps` : '') + ' · apasă ▶ pentru a relua';
   const npLogo = $('np-logo');
   npLogo.innerHTML = '';
@@ -2390,11 +2820,16 @@ function restoreLastPlayed() {
     renderSkeleton();
     restoreLastPlayed();
 
+    // Starea inițială a controalelor TV
+    $('only-working-chk').checked = state.tvOnlyWorking;
+    $('tv-health-row').classList.remove('hidden'); // modul implicit e TV
+
     // Focusăm input-ul de căutare pentru început
     $('search-input').focus();
 
     await loadTV(state.currentTvCountry);
     applyFilter();
+    kickTvHealthCheck();
 
     // Încercăm focus pe primul element din listă
     setTimeout(() => {
