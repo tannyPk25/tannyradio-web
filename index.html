@@ -543,6 +543,41 @@
   }
   .visualizer.paused { opacity: 0.3; }
 
+  /* Spinner de conectare TV */
+  .tv-spinner {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    pointer-events: none;
+    background: rgba(7, 5, 13, 0.35);
+  }
+  .tv-spinner.active { display: flex; }
+  .tv-spinner-ring {
+    width: 54px;
+    height: 54px;
+    border: 3px solid rgba(0, 240, 255, 0.18);
+    border-top-color: var(--neon-cyan);
+    border-radius: 50%;
+    animation: tv-spin 0.8s linear infinite;
+    box-shadow: 0 0 18px rgba(0, 240, 255, 0.35);
+  }
+  @keyframes tv-spin { to { transform: rotate(360deg); } }
+  .tv-spinner-label {
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 0.18em;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tv-spinner-ring { animation-duration: 2s; }
+  }
+
   /* No-selection state */
   .idle-state {
     position: absolute;
@@ -1002,10 +1037,10 @@
     .np-logo { width: 40px; height: 40px; flex-shrink: 0; }
     .np-title { font-size: 17px; }
     .np-subtitle { font-size: 10px; }
-    .np-controls { gap: 4px; flex-wrap: nowrap; }
-    .ctrl-btn { width: 36px; height: 36px; font-size: 14px; }
-    .ctrl-btn.play { width: 44px; height: 44px; }
-    input[type="range"] { width: 55px; }
+    .np-controls { gap: 3px; flex-wrap: nowrap; }
+    .ctrl-btn { width: 34px; height: 34px; font-size: 14px; }
+    .ctrl-btn.play { width: 42px; height: 42px; }
+    input[type="range"] { width: 44px; }
 
     .search-box { padding: 10px; }
     .search-box input, .search-box select { padding: 9px 10px; font-size: 13px; }
@@ -1113,6 +1148,11 @@
         <h2>SIGNAL · STANDBY</h2>
         <p>Selectează un canal sau o stație din panoul lateral pentru a începe transmisiunea.</p>
       </div>
+
+      <div class="tv-spinner" id="tv-spinner" aria-hidden="true">
+        <div class="tv-spinner-ring"></div>
+        <div class="tv-spinner-label">SE CONECTEAZĂ</div>
+      </div>
     </div>
 
     <div class="now-playing">
@@ -1130,6 +1170,7 @@
         <button class="ctrl-btn" id="mute-btn" type="button" title="Mute/Unmute">🔊</button>
         <button class="ctrl-btn" id="sleep-btn" type="button" title="Sleep timer">⏰</button>
         <button class="ctrl-btn" id="custom-btn" type="button" title="Redă URL custom">⌨</button>
+        <button class="ctrl-btn" id="share-btn" type="button" title="Partajează">⤴</button>
         <button class="ctrl-btn" id="fullscreen-btn" type="button" title="Fullscreen">⛶</button>
         <div class="volume-wrap">
           <input type="range" id="volume" min="0" max="100" value="80" title="Volum" aria-label="Volum">
@@ -1962,6 +2003,10 @@ function setNpTitle(text) {
   });
 }
 
+// Spinner de conectare TV — arată feedback între click și pornirea stream-ului.
+function showSpinner() { $('tv-spinner')?.classList.add('active'); }
+function hideSpinner() { $('tv-spinner')?.classList.remove('active'); }
+
 // Umple slider-ul de volum până la nivelul curent (gradient pe track).
 function setVolumeFill(pct) {
   const v = $('volume');
@@ -1972,6 +2017,8 @@ function setVolumeFill(pct) {
 
 // ============= PLAYBACK =============
 function stopAll() {
+  hideSpinner();
+  clearTimeout(_radioReconnectTimer);
   if (state.hls) { state.hls.destroy(); state.hls = null; }
   video.pause(); video.removeAttribute('src'); video.load();
   audio.pause(); audio.removeAttribute('src');
@@ -2066,6 +2113,7 @@ function handleTvFailure(item) {
     toast(`Prea multe canale indisponibile la rând — oprit`);
     return;
   }
+  hideSpinner();
   _tvSkipCount++;
   toast(`⏭ ${item.name} indisponibil — sar la următorul (${_tvSkipCount})`);
   setTimeout(() => {
@@ -2075,6 +2123,7 @@ function handleTvFailure(item) {
 
 function playTV(item) {
   const url = item.url;
+  showSpinner();
   // Redarea e inițiată de user (click) → politica autoplay permite sunet.
   // Aplicăm preferința de mute, implicit NEmutat (fix „fără sunet pe PC").
   video.muted = state.muted;
@@ -2112,6 +2161,7 @@ function playRadio(item) {
   audio.src = item.url;
   audio.volume = $('volume').value / 100;
   audio.muted = state.muted;
+  _radioReconnect = 0; // stație nouă → resetăm contorul de reconectare
   audio.play()
     .then(() => {
       $('visualizer').classList.remove('paused');
@@ -2121,6 +2171,34 @@ function playRadio(item) {
       toast(`Stație indisponibilă: ${item.name}`);
       $('visualizer').classList.add('paused');
     });
+}
+
+// ---- Reconectare automată radio ----
+// Stream-urile radio pică des; reîncercăm de câteva ori înainte să renunțăm.
+const RADIO_RECONNECT_LIMIT = 3;
+let _radioReconnect = 0;
+let _radioReconnectTimer = null;
+
+function reconnectRadio() {
+  const item = state.current;
+  if (!item || (item._type || state.mode) !== 'radio') return;
+  $('visualizer').classList.add('paused');
+  if (_radioReconnect >= RADIO_RECONNECT_LIMIT) {
+    toast(`Stație indisponibilă: ${item.name}`);
+    return;
+  }
+  _radioReconnect++;
+  toast(`↻ Reconectare radio (${_radioReconnect}/${RADIO_RECONNECT_LIMIT})...`);
+  clearTimeout(_radioReconnectTimer);
+  _radioReconnectTimer = setTimeout(() => {
+    if (!state.current || state.current.id !== item.id) return; // user-ul a schimbat
+    audio.src = item.url;
+    audio.muted = state.muted;
+    audio.volume = $('volume').value / 100;
+    audio.play()
+      .then(() => $('visualizer').classList.remove('paused'))
+      .catch(() => {}); // dacă pică iar, evenimentul 'error' reîncearcă
+  }, 1500);
 }
 
 // ============= PLAYLIST IMPORT =============
@@ -2231,6 +2309,7 @@ $('mode-recent').addEventListener('click', () => switchMode('recent'));
 
 async function switchMode(mode) {
   state.mode = mode;
+  try { localStorage.setItem('tr-mode', mode); } catch (_) {}
   document.querySelectorAll('.mode-toggle button').forEach(b => b.classList.remove('active'));
   $('mode-' + mode).classList.add('active');
   $('stat-mode').textContent = mode.toUpperCase();
@@ -2494,6 +2573,29 @@ $('custom-url').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeCustomDialog();
 });
 
+$('share-btn').addEventListener('click', async () => {
+  if (!state.current) { toast('Selectează ceva mai întâi'); return; }
+  const name = state.current.name || 'TannyRadio';
+  const shareData = {
+    title: 'TannyRadio',
+    text: `Ascult „${name}" pe TannyRadio 📻`,
+    url: location.href,
+  };
+  // Web Share API (mobil) — deschide meniul nativ (WhatsApp, etc.)
+  if (navigator.share) {
+    try { await navigator.share(shareData); return; }
+    catch (_) { return; } // user a anulat — nu tratăm ca eroare
+  }
+  // Fallback desktop: copiem în clipboard
+  const txt = `${shareData.text} — ${shareData.url}`;
+  try {
+    await navigator.clipboard.writeText(txt);
+    toast('🔗 Link copiat în clipboard');
+  } catch (_) {
+    toast('Partajare neacceptată pe acest dispozitiv');
+  }
+});
+
 $('mute-btn').addEventListener('click', () => {
   state.muted = !state.muted;
   video.muted = audio.muted = state.muted;
@@ -2529,11 +2631,14 @@ document.addEventListener('webkitfullscreenchange', () => {
 });
 
 audio.addEventListener('error', () => {
-  if (state.current && (state.current._type || state.mode) === 'radio') {
-    toast(`Eroare stream radio: ${state.current.name}`);
-    $('visualizer').classList.add('paused');
-  }
+  if (state.current && (state.current._type || state.mode) === 'radio') reconnectRadio();
 });
+// Un stream „live" nu ar trebui să se termine — dacă o face, reconectăm.
+audio.addEventListener('ended', () => {
+  if (state.current && (state.current._type || state.mode) === 'radio') reconnectRadio();
+});
+// Redare reușită → resetăm contorul de reconectare.
+audio.addEventListener('playing', () => { _radioReconnect = 0; });
 
 video.addEventListener('error', () => {
   if (state.current && (state.current._type || state.mode) === 'tv' && !state.hls) {
@@ -2541,8 +2646,9 @@ video.addEventListener('error', () => {
   }
 });
 
-// Canal pornit cu succes → resetăm contorul de auto-skip
-video.addEventListener('playing', () => { _tvSkipCount = 0; });
+// Canal pornit cu succes → resetăm contorul de auto-skip și ascundem spinner-ul
+video.addEventListener('playing', () => { _tvSkipCount = 0; hideSpinner(); });
+video.addEventListener('canplay', hideSpinner);
 
 // (Fostul handler „unmute la primul click" a fost eliminat — acum dezactivăm
 //  mute-ul direct în playTV/playRadio, în cadrul gestului user-ului.)
@@ -2830,6 +2936,12 @@ function restoreLastPlayed() {
     await loadTV(state.currentTvCountry);
     applyFilter();
     kickTvHealthCheck();
+
+    // Reținem ultimul mod folosit (TV rămâne default; playlist necesită date, îl sărim)
+    const savedMode = _lsGet('tr-mode', 'tv');
+    if (savedMode && savedMode !== 'tv' && savedMode !== 'playlist') {
+      switchMode(savedMode);
+    }
 
     // Încercăm focus pe primul element din listă
     setTimeout(() => {
