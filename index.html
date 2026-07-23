@@ -199,6 +199,10 @@
 
   .search-box input::placeholder { color: var(--text-dim); }
 
+  /* Dropdown gen radio — ascuns în afara modului radio */
+  #genre-select { margin-bottom: 0; }
+  #genre-select.genre-hidden { display: none; }
+
   .channel-list {
     flex: 1;
     overflow-y: auto;
@@ -223,6 +227,20 @@
   .channel:hover {
     background: rgba(177, 78, 255, 0.08);
     border-left-color: var(--neon-violet);
+  }
+
+  /* Focus accesibil la tastatură (desktop/laptop), fără să deranjeze la mouse */
+  .channel:focus-visible {
+    outline: 2px solid var(--neon-cyan);
+    outline-offset: -2px;
+    background: rgba(0, 240, 255, 0.06);
+  }
+  .ctrl-btn:focus-visible,
+  .mode-toggle button:focus-visible,
+  .sleep-opt:focus-visible,
+  .pl-tab:focus-visible {
+    outline: 2px solid var(--neon-cyan);
+    outline-offset: 2px;
   }
 
   .channel.active {
@@ -332,6 +350,34 @@
     40% { content: '.'; }
     60% { content: '..'; }
     80%, 100% { content: '...'; }
+  }
+
+  /* Skeleton de loading — rânduri fantomă cu shimmer */
+  .skel-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+  }
+  .skel-box {
+    background: linear-gradient(90deg,
+      rgba(177, 78, 255, 0.06) 25%,
+      rgba(177, 78, 255, 0.16) 50%,
+      rgba(177, 78, 255, 0.06) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.3s ease-in-out infinite;
+    border-radius: 2px;
+  }
+  .skel-logo { width: 36px; height: 36px; flex-shrink: 0; }
+  .skel-lines { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .skel-line-1 { height: 11px; width: 70%; }
+  .skel-line-2 { height: 9px; width: 40%; }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skel-box { animation: none; }
   }
 
   /* MAIN PLAYER */
@@ -929,6 +975,9 @@
         <select id="filter-select" title="Filtrează după țară" aria-label="Filtrează după țară">
           <option value="">// toate țările</option>
         </select>
+        <select id="genre-select" class="genre-hidden" title="Filtrează după gen" aria-label="Filtrează după gen">
+          <option value="">// toate genurile</option>
+        </select>
       </div>
       <div class="channel-list" id="channel-list">
         <div class="loading">Se încarcă</div>
@@ -1057,14 +1106,21 @@ const TV_COUNTRIES = [
   {code:'jp',name:'🇯🇵 Japan'}, {code:'kr',name:'🇰🇷 Korea'},
 ];
 
+// Helper mic pentru citirea sigură din localStorage
+function _lsGet(key, fallback) {
+  try { const v = localStorage.getItem(key); return v === null ? fallback : v; }
+  catch (_) { return fallback; }
+}
+
 const state = {
   mode: 'tv',           // 'tv' | 'radio' | 'playlist' | 'fav'
   tvList: [],
   tvCache: {},
-  currentTvCountry: 'ro',
+  currentTvCountry: _lsGet('tr-tv-country', 'ro'),
   radioList: [],
   radioCache: {},
-  currentRadioCountry: 'RO',
+  currentRadioCountry: _lsGet('tr-radio-country', 'RO'),
+  radioGenre: '',       // filtru gen radio (tag), '' = toate
   playlistList: [],
   playlistName: 'Playlist',
   filtered: [],
@@ -1079,6 +1135,17 @@ const state = {
 };
 
 const MAX_RECENT = 30;
+
+// Reține ultimul canal redat, pentru resume la deschidere
+function saveLastPlayed(item, type) {
+  try {
+    localStorage.setItem('tr-last', JSON.stringify({
+      id: item.id, name: item.name, url: item.url,
+      logo: item.logo || '', country: item.country || '',
+      tags: item.tags || '', bitrate: item.bitrate || 0, _type: type
+    }));
+  } catch (_) {}
+}
 
 function pushRecent(item, type) {
   const entry = {
@@ -1413,6 +1480,29 @@ function getCurrentSource() {
   return [];
 }
 
+// Populează dropdown-ul de gen din tag-urile stațiilor radio încărcate.
+// Sortăm genurile după frecvență și păstrăm cele mai comune ~28.
+function populateGenreOptions() {
+  const sel = $('genre-select');
+  if (!sel) return;
+  const counts = new Map();
+  for (const s of state.radioList) {
+    if (!s.tags) continue;
+    for (let tag of String(s.tags).split(',')) {
+      tag = tag.trim().toLowerCase();
+      if (tag.length < 2 || tag.length > 24) continue;
+      counts.set(tag, (counts.get(tag) || 0) + 1);
+    }
+  }
+  const top = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 28)
+    .map(([tag]) => tag)
+    .sort();
+  sel.innerHTML = '<option value="">// toate genurile</option>' +
+    top.map(g => `<option value="${escapeHtml(g)}"${g === state.radioGenre ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('');
+}
+
 function applyFilter() {
   const search = $('search-input').value.toLowerCase().trim();
   let list = getCurrentSource();
@@ -1425,9 +1515,27 @@ function applyFilter() {
   } else if (state.mode === 'recent' && dropVal) {
     list = list.filter(c => c._type === dropVal);
   }
+  // Filtru gen — doar în modul radio
+  if (state.mode === 'radio' && state.radioGenre) {
+    const g = state.radioGenre;
+    list = list.filter(c => (c.tags || '').toLowerCase().includes(g));
+  }
   if (search) list = list.filter(c => c.name.toLowerCase().includes(search));
   state.filtered = list;
   renderList();
+}
+
+// Skeleton de loading — înlocuiește textul „Se încarcă” cu rânduri fantomă
+function renderSkeleton(n = 9) {
+  const row = `
+    <div class="skel-row">
+      <div class="skel-box skel-logo"></div>
+      <div class="skel-lines">
+        <div class="skel-box skel-line-1"></div>
+        <div class="skel-box skel-line-2"></div>
+      </div>
+    </div>`;
+  $('channel-list').innerHTML = row.repeat(n);
 }
 
 function renderList() {
@@ -1537,6 +1645,7 @@ window.__broadcastPrev = function () {
 function play(item) {
   stopAll();
   state.current = item;
+  state.pendingResume = false;
   $('idle-state').classList.add('hidden');
   $('np-title').textContent = item.name;
   $('np-subtitle').textContent = item.country + (item.bitrate ? ` · ${item.bitrate}kbps` : '');
@@ -1570,6 +1679,7 @@ function play(item) {
   $('play-btn').textContent = '⏸';
   Bridge.notifyPlaying(item, itemType === 'tv');
   pushRecent(item, itemType);
+  saveLastPlayed(item, itemType);
   renderList();
 }
 
@@ -1617,20 +1727,44 @@ function playRadio(item) {
 }
 
 // ============= PLAYLIST IMPORT =============
-const CORS_PROXY = 'https://corsproxy.io/?';
+// Mai multe proxy-uri CORS încercate pe rând — dacă unul pică (sau își schimbă
+// API-ul, cum a făcut corsproxy.io), trecem la următorul. Fiecare împachetează
+// altfel URL-ul țintă.
+const CORS_PROXIES = [
+  u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  u => `https://thingproxy.freeboard.io/fetch/${u}`,
+  u => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+];
 
-async function fetchWithProxy(url) {
+// Întoarce textul M3U, încercând întâi direct și apoi fiecare proxy pe rând.
+async function fetchTextWithProxy(url) {
+  // 1) Direct (merge dacă serverul trimite CORS headers)
   try {
     const res = await fetch(url);
-    if (res.ok) return res;
+    if (res.ok) {
+      const txt = await res.text();
+      if (txt && txt.length) return txt;
+    }
   } catch (_) {}
-  return fetch(CORS_PROXY + encodeURIComponent(url));
+
+  // 2) Proxy-uri de rezervă, în ordine
+  for (const build of CORS_PROXIES) {
+    try {
+      const res = await fetch(build(url));
+      if (!res.ok) continue;
+      const txt = await res.text();
+      if (txt && txt.length) return txt;
+    } catch (_) { /* încearcă următorul */ }
+  }
+  throw new Error('Toate proxy-urile CORS au eșuat');
 }
 
 async function loadPlaylistFromUrl(m3uUrl) {
-  const res = await fetchWithProxy(m3uUrl);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return parseM3U(await res.text());
+  const text = await fetchTextWithProxy(m3uUrl);
+  const list = parseM3U(text);
+  if (!list.length) throw new Error('Lista goală sau format M3U invalid');
+  return list;
 }
 
 // Playlist dialog tab switching
@@ -1704,7 +1838,10 @@ async function switchMode(mode) {
   $('mode-' + mode).classList.add('active');
   $('stat-mode').textContent = mode.toUpperCase();
   $('search-input').value = '';
-  $('channel-list').innerHTML = '<div class="loading">Se încarcă</div>';
+  renderSkeleton();
+
+  // Dropdown-ul de gen apare doar în modul radio
+  $('genre-select').classList.toggle('genre-hidden', mode !== 'radio');
 
   if (mode === 'tv') {
     $('filter-select').innerHTML = TV_COUNTRIES
@@ -1716,6 +1853,7 @@ async function switchMode(mode) {
       .map(c => `<option value="${c.code.toUpperCase()}" ${c.code.toUpperCase() === state.currentRadioCountry ? 'selected' : ''}>${c.name}</option>`)
       .join('');
     await loadRadio(state.currentRadioCountry);
+    populateGenreOptions();
   } else if (mode === 'playlist') {
     const groups = [...new Set(state.playlistList.flatMap(c => c.categories))].filter(Boolean).sort();
     $('filter-select').innerHTML = '<option value="">// toate grupurile</option>' +
@@ -1767,16 +1905,25 @@ $('filter-select').addEventListener('change', async () => {
   const val = $('filter-select').value;
   if (state.mode === 'tv') {
     state.currentTvCountry = val;
+    try { localStorage.setItem('tr-tv-country', val); } catch (_) {}
     $('search-input').value = '';
-    $('channel-list').innerHTML = '<div class="loading">Se încarcă</div>';
+    renderSkeleton();
     await loadTV(val);
   } else if (state.mode === 'radio') {
     state.currentRadioCountry = val.toUpperCase();
+    try { localStorage.setItem('tr-radio-country', val.toUpperCase()); } catch (_) {}
+    state.radioGenre = '';
     $('search-input').value = '';
-    $('channel-list').innerHTML = '<div class="loading">Se încarcă</div>';
+    renderSkeleton();
     await loadRadio(val);
+    populateGenreOptions();
   }
   // playlist and fav: just re-filter without fetching
+  applyFilter();
+});
+
+$('genre-select').addEventListener('change', () => {
+  state.radioGenre = $('genre-select').value;
   applyFilter();
 });
 
@@ -1808,6 +1955,12 @@ $('channel-list').addEventListener('click', (e) => {
 
 $('play-btn').addEventListener('click', () => {
   if (!state.current) { toast('Selectează ceva mai întâi'); return; }
+  // Resume după restore: nimic nu e încărcat încă → încarcă și redă stream-ul
+  if (state.pendingResume) {
+    state.pendingResume = false;
+    play(state.current);
+    return;
+  }
   const isTv = (state.current._type || state.mode) === 'tv';
   const el = isTv ? video : audio;
   if (el.paused) {
@@ -1886,6 +2039,7 @@ $('volume').addEventListener('input', (e) => {
   const v = e.target.value / 100;
   video.volume = v;
   audio.volume = v;
+  try { localStorage.setItem('tr-volume', e.target.value); } catch (_) {}
 });
 
 $('custom-btn').addEventListener('click', () => {
@@ -1923,6 +2077,7 @@ $('mute-btn').addEventListener('click', () => {
   video.muted = muted;
   audio.muted = muted;
   $('mute-btn').textContent = muted ? '🔇' : '🔊';
+  try { localStorage.setItem('tr-muted', muted ? '1' : '0'); } catch (_) {}
 });
 
 $('fullscreen-btn').addEventListener('click', () => {
@@ -2184,17 +2339,61 @@ sidebarToggleBtn.addEventListener('click', () => {
   $('search-input').focus({ preventScroll: true });
 });
 
+// ============= RESTORE PERSISTAT =============
+// Volum + mute salvate din sesiunea anterioară
+(function restorePrefs() {
+  const savedVol = _lsGet('tr-volume', null);
+  if (savedVol !== null) {
+    const vv = Math.max(0, Math.min(100, parseInt(savedVol, 10) || 0));
+    $('volume').value = vv;
+    video.volume = audio.volume = vv / 100;
+  }
+  const savedMute = _lsGet('tr-muted', null);
+  if (savedMute === '1') {
+    video.muted = audio.muted = true;
+    $('mute-btn').textContent = '🔇';
+  }
+})();
+
+// Pre-încarcă ultimul canal în bara "now playing" (fără autoplay — blocat de browser).
+// User-ul apasă ▶ ca să reia.
+function restoreLastPlayed() {
+  let last;
+  try { last = JSON.parse(_lsGet('tr-last', 'null')); } catch (_) { last = null; }
+  if (!last || !last.url) return;
+  state.current = last;
+  state.pendingResume = true; // nimic nu e încă încărcat în media element
+  $('idle-state').classList.add('hidden');
+  $('np-title').textContent = last.name;
+  $('np-subtitle').textContent = (last.country || '') + (last.bitrate ? ` · ${last.bitrate}kbps` : '') + ' · apasă ▶ pentru a relua';
+  const npLogo = $('np-logo');
+  npLogo.innerHTML = '';
+  const npFb = (last.name[0] || '?').toUpperCase();
+  if (last.logo && last.logo !== 'null' && last.logo !== 'N/A') {
+    const img = document.createElement('img');
+    img.src = last.logo; img.alt = '';
+    img.onerror = () => { npLogo.textContent = npFb; };
+    npLogo.appendChild(img);
+  } else {
+    npLogo.textContent = npFb;
+  }
+  $('play-btn').textContent = '▶';
+}
+
 // ============= INIT =============
 (async () => {
   try {
     $('filter-select').innerHTML = TV_COUNTRIES
-      .map(c => `<option value="${c.code}" ${c.code === 'ro' ? 'selected' : ''}>${c.name}</option>`)
+      .map(c => `<option value="${c.code}" ${c.code === state.currentTvCountry ? 'selected' : ''}>${c.name}</option>`)
       .join('');
+
+    renderSkeleton();
+    restoreLastPlayed();
 
     // Focusăm input-ul de căutare pentru început
     $('search-input').focus();
 
-    await loadTV('ro');
+    await loadTV(state.currentTvCountry);
     applyFilter();
 
     // Încercăm focus pe primul element din listă
@@ -2203,7 +2402,7 @@ sidebarToggleBtn.addEventListener('click', () => {
       if (first) first.focus();
     }, 1000);
 
-    loadRadio('RO');
+    loadRadio(state.currentRadioCountry);
   } catch (e) {
     console.error("Init error:", e);
     applyFilter();
