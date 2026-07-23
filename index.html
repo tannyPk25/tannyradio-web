@@ -161,6 +161,36 @@
 
   .stats span { color: var(--neon-amber); }
 
+  /* Buton Mod Mașină */
+  .car-mode-btn {
+    background: transparent;
+    border: 1px solid var(--grid-line);
+    color: var(--text-primary);
+    width: 40px; height: 40px;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .car-mode-btn:hover { border-color: var(--neon-cyan); }
+  .car-mode-btn.active {
+    background: var(--neon-cyan);
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 14px rgba(0, 240, 255, 0.6);
+  }
+
+  /* ===== MOD MAȘINĂ — ținte de atins mai mari ===== */
+  body.car-mode .channel { padding: 16px 18px; min-height: 62px; }
+  body.car-mode .channel-logo { width: 46px; height: 46px; }
+  body.car-mode .channel-name { font-size: 17px; }
+  body.car-mode .channel-meta { font-size: 13px; }
+  body.car-mode .fav-star { font-size: 20px; padding: 8px; }
+  body.car-mode .np-title { font-size: 26px; }
+  body.car-mode .ctrl-btn.play { transform: scale(1.15); }
+
   /* SIDEBAR */
   aside {
     width: 320px;
@@ -207,7 +237,8 @@
   .tv-health-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 8px 10px;
     margin-top: 8px;
     font-family: 'VT323', monospace;
     font-size: 15px;
@@ -1095,6 +1126,7 @@
       <button type="button" id="mode-recent">RECENT</button>
     </div>
     <div class="stats">CH: <span id="stat-count">0</span> · <span id="stat-mode">TV</span></div>
+    <button type="button" class="car-mode-btn" id="car-mode-btn" title="Mod Mașină (ecran aprins, butoane mari)">🚗</button>
     <div class="sleep-indicator" id="sleep-indicator">⏰ <span id="sleep-remaining">--:--</span></div>
   </header>
 
@@ -1113,6 +1145,9 @@
         <div class="tv-health-row" id="tv-health-row">
           <label class="ow-toggle">
             <input type="checkbox" id="only-working-chk"> doar funcționale
+          </label>
+          <label class="ow-toggle" title="Redă TV ca radio (doar sunet, ideal în mașină)">
+            <input type="checkbox" id="tv-audio-chk"> 🔊 doar sunet
           </label>
           <button type="button" id="tv-recheck" title="Reverifică canalele">↻</button>
           <span class="tv-health-progress" id="tv-health-progress"></span>
@@ -1272,6 +1307,8 @@ const state = {
   currentTvCountry: _lsGet('tr-tv-country', 'ro'),
   tvHealth: {},         // url -> 'ok' | 'dead' pentru țara curentă
   tvOnlyWorking: _lsGet('tr-only-working', '1') === '1', // ascunde canale moarte
+  tvAudioOnly: _lsGet('tr-tv-audio', '0') === '1',       // TV redat ca radio (fără video)
+  carMode: _lsGet('tr-car-mode', '0') === '1',           // ecran aprins + UI mărit
   radioList: [],
   radioCache: {},
   currentRadioCountry: _lsGet('tr-radio-country', 'RO'),
@@ -2079,9 +2116,20 @@ function play(item) {
   const itemType = item._type || state.mode;
 
   if (itemType === 'tv') {
-    video.style.display = 'block';
-    $('radio-display').classList.remove('active');
-    playTV(item);
+    if (state.tvAudioOnly) {
+      // TV redat ca radio: fără video (fără lip-sync pe Bluetooth), sigur în mers
+      video.style.display = 'none';
+      $('radio-display').classList.add('active');
+      $('radio-name').textContent = item.name;
+      $('radio-tags').textContent = (item.country || '') + ' · TV · doar sunet';
+      playTV(item);
+      $('visualizer').classList.remove('paused');
+      Viz.start();
+    } else {
+      video.style.display = 'block';
+      $('radio-display').classList.remove('active');
+      playTV(item);
+    }
   } else {
     video.style.display = 'none';
     $('radio-display').classList.add('active');
@@ -2877,6 +2925,76 @@ sidebarToggleBtn.addEventListener('click', () => {
   sidebarEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('search-input').focus({ preventScroll: true });
 });
+
+// ============= MOD MAȘINĂ + TV DOAR SUNET =============
+let _wakeLock = null;
+async function acquireWakeLock() {
+  try {
+    if ('wakeLock' in navigator && !_wakeLock) {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener?.('release', () => { _wakeLock = null; });
+    }
+  } catch (_) { /* necesită gest/vizibilitate — reîncercăm la click */ }
+}
+async function releaseWakeLock() {
+  try { if (_wakeLock) { await _wakeLock.release(); _wakeLock = null; } } catch (_) {}
+}
+// Ecranul poate elibera lock-ul când ascunzi tab-ul → îl reluăm la revenire
+document.addEventListener('visibilitychange', () => {
+  if (state.carMode && document.visibilityState === 'visible') acquireWakeLock();
+});
+
+// Comută vizualizarea TV doar-sunet fără să reîncarce stream-ul
+function applyTvAudioOnlyView() {
+  if (!state.current || (state.current._type || state.mode) !== 'tv') return;
+  if (state.tvAudioOnly) {
+    video.style.display = 'none';
+    $('radio-display').classList.add('active');
+    $('radio-name').textContent = state.current.name;
+    $('radio-tags').textContent = (state.current.country || '') + ' · TV · doar sunet';
+    $('visualizer').classList.remove('paused');
+    Viz.start();
+  } else {
+    Viz.stop();
+    $('radio-display').classList.remove('active');
+    video.style.display = 'block';
+  }
+}
+
+function setTvAudioOnly(on) {
+  state.tvAudioOnly = on;
+  try { localStorage.setItem('tr-tv-audio', on ? '1' : '0'); } catch (_) {}
+  const chk = $('tv-audio-chk'); if (chk) chk.checked = on;
+  applyTvAudioOnlyView();
+}
+
+function setCarMode(on) {
+  state.carMode = on;
+  try { localStorage.setItem('tr-car-mode', on ? '1' : '0'); } catch (_) {}
+  document.body.classList.toggle('car-mode', on);
+  $('car-mode-btn').classList.toggle('active', on);
+  if (on) {
+    acquireWakeLock();
+    if (!state.tvAudioOnly) setTvAudioOnly(true); // TV pe doar-sunet = sigur în mers
+    toast('🚗 Mod Mașină · ecran aprins · TV pe doar sunet');
+  } else {
+    releaseWakeLock();
+    toast('Mod Mașină oprit');
+  }
+}
+
+$('car-mode-btn').addEventListener('click', () => setCarMode(!state.carMode));
+$('tv-audio-chk').addEventListener('change', (e) => setTvAudioOnly(e.target.checked));
+
+// Restaurare stare la pornire
+$('tv-audio-chk').checked = state.tvAudioOnly;
+if (state.carMode) {
+  document.body.classList.add('car-mode');
+  $('car-mode-btn').classList.add('active');
+  acquireWakeLock();
+}
+// Reia wake lock la primul gest dacă a fost refuzat la load
+document.addEventListener('click', () => { if (state.carMode && !_wakeLock) acquireWakeLock(); });
 
 // ============= RESTORE PERSISTAT =============
 // Volum + mute salvate din sesiunea anterioară
