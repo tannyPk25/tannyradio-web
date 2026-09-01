@@ -5,8 +5,8 @@
  *  - stream-uri, API-uri, logo-uri, CDN, fonturi (cross-origin): fără cache, doar network
  * Bump versiunea ca să invalidezi cache-ul vechi la fiecare release de shell.
  */
-const CACHE = 'tannyradio-v1';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon.svg'];
+const CACHE = 'tannyradio-v2';
+const SHELL = ['/', '/index.html', '/design-refresh.css', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

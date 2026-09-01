@@ -1088,12 +1088,12 @@
   <header>
     <div class="logo">TANNYRADIO</div>
     <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Deschide meniu">☰</button>
-    <div class="mode-toggle">
-      <button type="button" id="mode-tv" class="active">TV</button>
-      <button type="button" id="mode-radio">RADIO</button>
-      <button type="button" id="mode-playlist">PLAYLIST</button>
-      <button type="button" id="mode-fav">FAVORITE</button>
-      <button type="button" id="mode-recent">RECENT</button>
+    <div class="mode-toggle" role="tablist" aria-label="Tip conținut">
+      <button type="button" id="mode-tv" class="active" role="tab" aria-selected="true">TV</button>
+      <button type="button" id="mode-radio" role="tab" aria-selected="false">RADIO</button>
+      <button type="button" id="mode-playlist" role="tab" aria-selected="false">PLAYLIST</button>
+      <button type="button" id="mode-fav" role="tab" aria-selected="false">FAVORITE</button>
+      <button type="button" id="mode-recent" role="tab" aria-selected="false">RECENT</button>
     </div>
     <div class="stats">CH: <span id="stat-count">0</span> · <span id="stat-mode">TV</span></div>
     <div class="sleep-indicator" id="sleep-indicator">⏰ <span id="sleep-remaining">--:--</span></div>
@@ -1102,7 +1102,7 @@
   <div class="main-container">
     <aside>
       <div class="search-box">
-        <input type="text" id="search-input" placeholder="// caută canal sau stație..."
+        <input type="text" id="search-input" placeholder="// caută canal sau stație..." aria-label="Caută canal sau stație"
           autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
           inputmode="search">
         <select id="filter-select" title="Filtrează după țară" aria-label="Filtrează după țară">
@@ -1115,11 +1115,11 @@
           <label class="ow-toggle">
             <input type="checkbox" id="only-working-chk"> doar funcționale
           </label>
-          <button type="button" id="tv-recheck" title="Reverifică canalele">↻</button>
-          <span class="tv-health-progress" id="tv-health-progress"></span>
+          <button type="button" id="tv-recheck" title="Reverifică canalele" aria-label="Reverifică disponibilitatea canalelor">↻</button>
+          <span class="tv-health-progress" id="tv-health-progress" role="status" aria-live="polite"></span>
         </div>
       </div>
-      <div class="channel-list" id="channel-list">
+      <div class="channel-list" id="channel-list" role="listbox" aria-label="Canale și stații">
         <div class="loading">Se încarcă</div>
       </div>
     </aside>
@@ -1127,7 +1127,7 @@
     <main>
     <div class="player-wrap">
       <div class="logo-backdrop" id="logo-backdrop"></div>
-      <video id="video-player" controls muted controlslist="nofullscreen nodownload noremoteplayback"></video>
+      <video id="video-player" controls muted playsinline aria-label="Player video" controlslist="nofullscreen nodownload noremoteplayback"></video>
       <audio id="audio-player"></audio>
 
       <div class="radio-display" id="radio-display">
@@ -1165,14 +1165,14 @@
         </div>
       </div>
       <div class="np-controls">
-        <button class="ctrl-btn" id="prev-btn" type="button" title="Anterior">⏮</button>
-        <button class="ctrl-btn play" id="play-btn" type="button">▶</button>
-        <button class="ctrl-btn" id="next-btn" type="button" title="Următorul">⏭</button>
-        <button class="ctrl-btn" id="mute-btn" type="button" title="Mute/Unmute">🔊</button>
-        <button class="ctrl-btn" id="sleep-btn" type="button" title="Sleep timer">⏰</button>
-        <button class="ctrl-btn" id="custom-btn" type="button" title="Redă URL custom">⌨</button>
-        <button class="ctrl-btn" id="share-btn" type="button" title="Partajează">⤴</button>
-        <button class="ctrl-btn" id="fullscreen-btn" type="button" title="Fullscreen">⛶</button>
+        <button class="ctrl-btn" id="prev-btn" type="button" title="Anterior" aria-label="Canalul anterior">⏮</button>
+        <button class="ctrl-btn play" id="play-btn" type="button" aria-label="Redă">▶</button>
+        <button class="ctrl-btn" id="next-btn" type="button" title="Următorul" aria-label="Canalul următor">⏭</button>
+        <button class="ctrl-btn" id="mute-btn" type="button" title="Mute/Unmute" aria-label="Dezactivează sunetul">🔊</button>
+        <button class="ctrl-btn" id="sleep-btn" type="button" title="Sleep timer" aria-label="Temporizator oprire">⏰</button>
+        <button class="ctrl-btn" id="custom-btn" type="button" title="Redă URL custom" aria-label="Deschide un URL personalizat">⌨</button>
+        <button class="ctrl-btn" id="share-btn" type="button" title="Partajează" aria-label="Partajează canalul curent">⤴</button>
+        <button class="ctrl-btn" id="fullscreen-btn" type="button" title="Fullscreen" aria-label="Ecran complet">⛶</button>
         <div class="volume-wrap">
           <input type="range" id="volume" min="0" max="100" value="80" title="Volum" aria-label="Volum">
         </div>
@@ -1182,7 +1182,7 @@
 </div> <!-- end main-container -->
 </div> <!-- end app -->
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <div class="custom-dialog" id="playlist-dialog" role="dialog" aria-modal="true" aria-label="Import Playlist">
   <div class="custom-dialog-box">
@@ -1912,8 +1912,8 @@ function renderList() {
   // Păstrăm poziția scroll-ului listei când user-ul continuă să tasteze
   const savedScroll = searchTerm ? list.scrollTop : 0;
 
-  // Render up to 500 items for performance
-  const items = state.filtered.slice(0, 500);
+  // Limităm DOM-ul pentru scroll fluid pe telefoane și TV box-uri cu memorie redusă.
+  const items = state.filtered.slice(0, 250);
   const showDot = state.mode === 'tv';
   list.innerHTML = items.map((c, i) => {
     const isActive = state.current && state.current.id === c.id;
@@ -1931,14 +1931,14 @@ function renderList() {
       ? `<span class="ch-dot ${state.tvHealth[c.url] || ''}" title="stare stream"></span>`
       : '';
     return `
-      <div class="channel ${isActive?'active':''}" data-idx="${i}">
+      <div class="channel ${isActive?'active':''}" data-idx="${i}" role="option" aria-selected="${isActive}" aria-label="${escapeHtml(c.name)}, ${escapeHtml(meta)}">
         ${dotHtml}
         <div class="channel-logo ${c.logo?'':'fallback'}" data-fb="${fb}">${logoHtml}</div>
         <div class="channel-info">
           <div class="channel-name">${escapeHtml(c.name)}</div>
           <div class="channel-meta">${escapeHtml(meta)}</div>
         </div>
-        <span class="fav-star ${isFav?'is-fav':''}" data-fav="${i}" data-type="${type}">★</span>
+        <span class="fav-star ${isFav?'is-fav':''}" data-fav="${i}" data-type="${type}" role="button" tabindex="0" aria-label="${isFav ? 'Elimină din favorite' : 'Adaugă la favorite'}">★</span>
       </div>
     `;
   }).join('');
@@ -2035,6 +2035,7 @@ window.__broadcastStop = function () {
   $('np-subtitle').textContent = 'aștept semnal...';
   $('np-logo').textContent = '—';
   $('play-btn').textContent = '▶';
+  $('play-btn').setAttribute('aria-label', 'Redă');
   $('visualizer')?.classList.add('paused');
   $('radio-display')?.classList.remove('active');
   setBackdrop('');
@@ -2092,6 +2093,7 @@ function play(item) {
   }
 
   $('play-btn').textContent = '⏸';
+  $('play-btn').setAttribute('aria-label', 'Pauză');
   Bridge.notifyPlaying(item, itemType === 'tv');
   pushRecent(item, itemType);
   saveLastPlayed(item, itemType);
@@ -2139,6 +2141,9 @@ function playTV(item) {
           retried = true;
           state.hls.startLoad();
         } else {
+          toast(data.type === Hls.ErrorTypes.MEDIA_ERROR
+            ? 'Flux video incompatibil sau corupt. Se încearcă următorul canal.'
+            : 'Conexiunea cu postul TV a eșuat. Se încearcă următorul canal.');
           handleTvFailure(item);
         }
       }
@@ -2169,7 +2174,7 @@ function playRadio(item) {
       Viz.start();
     })
     .catch(() => {
-      toast(`Stație indisponibilă: ${item.name}`);
+      toast(`Nu se poate porni ${item.name}. Verifică internetul sau încearcă altă stație.`);
       $('visualizer').classList.add('paused');
     });
 }
@@ -2311,8 +2316,11 @@ $('mode-recent').addEventListener('click', () => switchMode('recent'));
 async function switchMode(mode) {
   state.mode = mode;
   try { localStorage.setItem('tr-mode', mode); } catch (_) {}
-  document.querySelectorAll('.mode-toggle button').forEach(b => b.classList.remove('active'));
-  $('mode-' + mode).classList.add('active');
+  document.querySelectorAll('.mode-toggle button').forEach(b => {
+    const selected = b.id === 'mode-' + mode;
+    b.classList.toggle('active', selected);
+    b.setAttribute('aria-selected', String(selected));
+  });
   $('stat-mode').textContent = mode.toUpperCase();
   $('search-input').value = '';
   renderSkeleton();
@@ -2454,6 +2462,13 @@ $('channel-list').addEventListener('click', (e) => {
   }
 });
 
+$('channel-list').addEventListener('keydown', (e) => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-fav]')) {
+    e.preventDefault();
+    e.target.click();
+  }
+});
+
 $('play-btn').addEventListener('click', () => {
   if (!state.current) { toast('Selectează ceva mai întâi'); return; }
   // Resume după restore: nimic nu e încărcat încă → încarcă și redă stream-ul
@@ -2467,11 +2482,13 @@ $('play-btn').addEventListener('click', () => {
   if (el.paused) {
     el.play();
     $('play-btn').textContent = '⏸';
+    $('play-btn').setAttribute('aria-label', 'Pauză');
     $('visualizer')?.classList.remove('paused');
     Bridge.notifyPlaying(state.current, isTv);
   } else {
     el.pause();
     $('play-btn').textContent = '▶';
+    $('play-btn').setAttribute('aria-label', 'Redă');
     $('visualizer')?.classList.add('paused');
     Bridge.notifyPaused();
   }
@@ -2601,8 +2618,12 @@ $('mute-btn').addEventListener('click', () => {
   state.muted = !state.muted;
   video.muted = audio.muted = state.muted;
   $('mute-btn').textContent = state.muted ? '🔇' : '🔊';
+  $('mute-btn').setAttribute('aria-label', state.muted ? 'Activează sunetul' : 'Dezactivează sunetul');
   try { localStorage.setItem('tr-muted', state.muted ? '1' : '0'); } catch (_) {}
 });
+
+window.addEventListener('offline', () => toast('Ești offline. Interfața rămâne disponibilă, dar streamurile necesită internet.'));
+window.addEventListener('online', () => toast('Conexiunea la internet a revenit.'));
 
 $('fullscreen-btn').addEventListener('click', () => {
   const wrap = document.querySelector('.player-wrap');
