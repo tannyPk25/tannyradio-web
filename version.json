@@ -1,6 +1,6 @@
 {
-  "versionCode": 6,
-  "versionName": "1.5.0",
-  "apkUrl": "https://github.com/tannyPk25/tannyradio-web/releases/download/v1.5.0/TMedia-v1.5.0.apk",
-  "notes": "Numele canalului dispare după ce pornește imaginea."
+  "versionCode": 7,
+  "versionName": "1.6.0",
+  "apkUrl": "https://github.com/tannyPk25/tannyradio-web/releases/download/v1.6.0/TMedia-v1.6.0.apk",
+  "notes": "Ghid TV în player, Back = canalul anterior, pornire pe ultimul canal, favorite ordonate, canale ascunse cu PIN, radio mai stabil."
 }
