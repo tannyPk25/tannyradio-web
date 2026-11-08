@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "1.4.0",
-  "apkUrl": "https://github.com/tannyPk25/tannyradio-web/releases/download/v1.4.0/TMedia-v1.4.0.apk",
-  "notes": "Ghid TV, melodia curentă la radio, sincronizare favorite, buton Digi Online."
+  "versionCode": 6,
+  "versionName": "1.5.0",
+  "apkUrl": "https://github.com/tannyPk25/tannyradio-web/releases/download/v1.5.0/TMedia-v1.5.0.apk",
+  "notes": "Numele canalului dispare după ce pornește imaginea."
 }
