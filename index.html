@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&family=Major+Mono+Display&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js" async></script>
 <style>
   :root {
     --bg-deep: #07050d;
@@ -1137,7 +1137,7 @@
     <main>
     <div class="player-wrap">
       <div class="logo-backdrop" id="logo-backdrop"></div>
-      <video id="video-player" controls muted playsinline aria-label="Player video" controlslist="nofullscreen nodownload noremoteplayback"></video>
+      <video id="video-player" poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" controls muted playsinline aria-label="Player video" controlslist="nofullscreen nodownload noremoteplayback"></video>
       <audio id="audio-player"></audio>
 
       <div class="radio-display" id="radio-display">
@@ -1381,6 +1381,7 @@ const audio = $('audio-player');
 
 // playsinline needed for iOS Safari — set via JS to avoid linter warnings
 video.setAttribute('playsinline', '');
+video.style.display = 'none'; // apare doar când rulează un canal TV în pagină
 
 // ============= AUDIO VISUALIZER (Web Audio API) =============
 const Viz = (() => {
@@ -2153,6 +2154,7 @@ window.__broadcastStop = function () {
   state.current = null;
   $('idle-state').classList.remove('hidden');
   setNpTitle('NIMIC ÎN REDARE');
+  video.style.display = 'none';
   $('np-subtitle').textContent = 'aștept semnal...';
   $('np-logo').textContent = '—';
   $('play-btn').textContent = '▶';
@@ -2263,6 +2265,7 @@ function playTV(item) {
   // Anulat de evenimentul 'playing'; dacă expiră, canalul n-a pornit niciodată
   if (NativePlayer.available()) {
     video.pause();
+    video.style.display = 'none'; // în APK canalul rulează în player-ul nativ
     _tvWatchdog = setTimeout(() => {
       if (state.current && state.current.id === item.id && state.nativeActive) handleTvFailure(item);
     }, 45000); // ExoPlayer raportează singur erorile reale; aici prindem doar blocajele
@@ -2983,7 +2986,7 @@ async function _tvSwitchMode(mode) {
 
 // Recuperare focus când se pierde (video/body preia focusul)
 document.addEventListener('focusout', () => {
-  if (!_isTv()) return;
+  if (!_IS_TV_DEVICE) return;
   requestAnimationFrame(() => {
     const a = document.activeElement;
     if (!a || a === document.body || a.tagName === 'VIDEO' || a.tagName === 'AUDIO') {

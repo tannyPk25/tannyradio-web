@@ -140,7 +140,9 @@ main { background: #030409; }
   .volume-wrap input { width: 70px; }
 }
 
-@media (max-width: 700px) and (orientation: portrait) {
+/* Mobil: doar după lățime — în WebView-ul Android (orientation: portrait) poate
+   raporta fals și layout-ul de mobil nu se aplica deloc */
+@media (max-width: 700px) {
   html, body { height: 100%; overflow: hidden; }
   .app { height: 100dvh; min-height: 0; }
   header { min-height: 58px; padding: env(safe-area-inset-top, 0) 10px 0; gap: 8px; }
@@ -175,13 +177,17 @@ main { background: #030409; }
     width: 100%;
     height: auto;
     min-height: 410px;
-    flex: 0 0 410px;
+    flex: 1 0 410px; /* umple ecranul până jos, fără bandă goală */
     padding: 8px;
     border-top-color: var(--surface-line);
     background: var(--bg-deep);
   }
   .search-box { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
   .search-box input:first-child { grid-column: 1 / -1; }
+  /* Țara ocupă tot rândul când nu e afișat și genul (mod TV) */
+  .search-box:has(#genre-select.genre-hidden) #filter-select { grid-column: 1 / -1; }
+  .tv-health-row { grid-column: 1 / -1; flex-wrap: wrap; row-gap: 4px; }
+  .tv-health-progress { flex-basis: 100%; }
   .search-box input, .search-box select { min-height: 42px; margin-bottom: 0; }
   .channel-list { min-height: 0; }
   .channel { min-height: 56px; margin: 3px 0; }
@@ -204,3 +210,7 @@ main { background: #030409; }
     scroll-behavior: auto !important;
   }
 }
+
+/* Toast-ul ascuns rămânea vizibil ca un chenar gol peste listă */
+.toast:not(.show) { opacity: 0; visibility: hidden; }
+.toast { transition: transform .3s, opacity .3s, visibility .3s; }
