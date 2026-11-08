@@ -2214,15 +2214,15 @@ $('sync-import').addEventListener('click', async () => {
 });
 
 // ============= ACTUALIZARE APK =============
-// Doar în aplicația Android: compară versiunea instalată cu /version.json (max. o dată pe zi).
+// Doar în aplicația Android: compară versiunea instalată cu /version.json la fiecare pornire.
 async function checkAppUpdate(force) {
   let cur;
   try {
     if (!window.AndroidBridge || typeof window.AndroidBridge.appVersionCode !== 'function') return;
     cur = window.AndroidBridge.appVersionCode();
   } catch (_) { return; }
-  const last = +_lsGet('tr-update-check', '0');
-  if (!force && Date.now() - last < 24 * 3600 * 1000) return;
+  // Verificăm la fiecare pornire (version.json are ~250 de octeți); „Mai târziu"
+  // ascunde doar versiunea respectivă.
   try {
     const res = await fetch('/version.json', { cache: 'no-store' });
     if (!res.ok) return;
