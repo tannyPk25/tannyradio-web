@@ -1,12 +1,16 @@
 /* TannyRadio Service Worker
  * Strategie:
- *  - app shell (same-origin static): cache-first, ca aplicația să pornească instant / offline
+ *  - app shell (same-origin static): stale-while-revalidate — pornește instant din cache,
+ *    dar se actualizează în fundal (altfel CSS-ul nou nu ajungea la useri până la bump de versiune)
  *  - navigare (HTML): network-first cu fallback la cache (updates propagă, dar merge și offline)
  *  - stream-uri, API-uri, logo-uri, CDN, fonturi (cross-origin): fără cache, doar network
  * Bump versiunea ca să invalidezi cache-ul vechi la fiecare release de shell.
  */
-const CACHE = 'tannyradio-v2';
-const SHELL = ['/', '/index.html', '/design-refresh.css', '/manifest.json', '/icon.svg'];
+const CACHE = 'tannyradio-v3';
+const SHELL = [
+  '/', '/index.html', '/design-refresh.css', '/manifest.json', '/icon.svg',
+  '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -41,8 +45,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('/index.html', copy)).catch(() => {});
+          // Cache-uim doar răspunsuri valide (nu pagini 404/500 ca „index")
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put('/index.html', copy)).catch(() => {});
+          }
           return res;
         })
         .catch(() => caches.match('/index.html').then((r) => r || caches.match('/')))
@@ -50,17 +57,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Restul asset-urilor same-origin: cache-first, populăm cache-ul la prima cerere.
+  // Restul asset-urilor same-origin: stale-while-revalidate.
   event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).then((res) => {
-        if (res && res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-        }
-        return res;
-      }).catch(() => cached);
-    })
+    caches.open(CACHE).then((cache) =>
+      cache.match(req).then((cached) => {
+        const network = fetch(req).then((res) => {
+          if (res && res.ok) cache.put(req, res.clone()).catch(() => {});
+          return res;
+        }).catch(() => cached);
+        if (cached) { event.waitUntil(network.then(() => {})); return cached; }
+        return network;
+      })
+    )
   );
 });

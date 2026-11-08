@@ -6,6 +6,7 @@
 <title>TannyRadio · TV & Radio</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ff2e88">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1266,6 +1267,29 @@ function _lsGet(key, fallback) {
   catch (_) { return fallback; }
 }
 
+// JSON din localStorage fără să blocheze aplicația dacă datele sunt corupte
+function _lsJson(key, fallback) {
+  try {
+    const v = JSON.parse(_lsGet(key, 'null'));
+    return (v && typeof v === 'object') ? v : fallback;
+  } catch (_) { return fallback; }
+}
+
+function _lsSet(key, value) {
+  try { localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value)); } catch (_) {}
+}
+
+// Copie minimă a unui canal, suficientă pentru redare fără lista țării încărcată
+function _snapshot(item, type) {
+  return {
+    id: item.id, name: item.name, url: item.url,
+    logo: item.logo || '', country: item.country || '',
+    tags: item.tags || '', bitrate: item.bitrate || 0, _type: type
+  };
+}
+
+const _favIds = _lsJson('broadcast-favs', {});
+
 const state = {
   mode: 'tv',           // 'tv' | 'radio' | 'playlist' | 'fav'
   tvList: [],
@@ -1282,8 +1306,13 @@ const state = {
   filtered: [],
   currentIndex: -1,
   current: null,
-  favorites: JSON.parse(localStorage.getItem('broadcast-favs') || '{"tv":[],"radio":[]}'),
-  recent: JSON.parse(localStorage.getItem('broadcast-recent') || '[]'),
+  favorites: {
+    tv: Array.isArray(_favIds.tv) ? _favIds.tv : [],
+    radio: Array.isArray(_favIds.radio) ? _favIds.radio : [],
+  },
+  // Datele complete ale favoritelor (id -> canal), ca să apară indiferent de țara încărcată
+  favItems: Object.assign({ tv: {}, radio: {} }, _lsJson('broadcast-fav-items', {})),
+  recent: (() => { const r = _lsJson('broadcast-recent', []); return Array.isArray(r) ? r : []; })(),
   muted: _lsGet('tr-muted', '0') === '1',  // preferință mute persistată
   hls: null,
   sleepTimer: null,    // ID setTimeout pentru oprirea redării
@@ -1295,25 +1324,46 @@ const MAX_RECENT = 30;
 
 // Reține ultimul canal redat, pentru resume la deschidere
 function saveLastPlayed(item, type) {
-  try {
-    localStorage.setItem('tr-last', JSON.stringify({
-      id: item.id, name: item.name, url: item.url,
-      logo: item.logo || '', country: item.country || '',
-      tags: item.tags || '', bitrate: item.bitrate || 0, _type: type
-    }));
-  } catch (_) {}
+  _lsSet('tr-last', _snapshot(item, type));
 }
 
 function pushRecent(item, type) {
-  const entry = {
-    id: item.id, name: item.name, url: item.url,
-    logo: item.logo || '', country: item.country || '',
-    tags: item.tags || '', bitrate: item.bitrate || 0,
-    _type: type, at: Date.now()
-  };
+  const entry = { ..._snapshot(item, type), at: Date.now() };
   // Dedup după id
   state.recent = [entry, ...state.recent.filter(r => r.id !== entry.id)].slice(0, MAX_RECENT);
-  localStorage.setItem('broadcast-recent', JSON.stringify(state.recent));
+  _lsSet('broadcast-recent', state.recent);
+}
+
+function toggleFavorite(item, type) {
+  const arr = state.favorites[type] = state.favorites[type] || [];
+  const map = state.favItems[type] = state.favItems[type] || {};
+  const pos = arr.indexOf(item.id);
+  if (pos >= 0) { arr.splice(pos, 1); delete map[item.id]; }
+  else { arr.push(item.id); map[item.id] = _snapshot(item, type); }
+  _lsSet('broadcast-favs', state.favorites);
+  _lsSet('broadcast-fav-items', state.favItems);
+  return pos < 0;
+}
+
+// Lista favoritelor: din datele salvate, cu fallback la listele încărcate
+// (favoritele vechi, salvate doar ca id, sunt completate când țara e încărcată).
+function getFavoriteList() {
+  const out = [];
+  for (const type of ['tv', 'radio']) {
+    const pools = type === 'tv'
+      ? [state.tvList, ...Object.values(state.tvCache)]
+      : [state.radioList, ...Object.values(state.radioCache)];
+    for (const id of state.favorites[type] || []) {
+      let it = state.favItems[type]?.[id];
+      if (!it) {
+        for (const pool of pools) { const f = pool.find(c => c.id === id); if (f) { it = _snapshot(f, type); break; } }
+        if (!it) it = state.recent.find(r => r.id === id && r._type === type);
+        if (it) { state.favItems[type][id] = it; _lsSet('broadcast-fav-items', state.favItems); }
+      }
+      if (it) out.push({ ...it, _type: type });
+    }
+  }
+  return out;
 }
 
 const $ = id => document.getElementById(id);
@@ -1490,7 +1540,7 @@ const MediaSess = (() => {
     wire();
     const art = [];
     if (item.logo && item.logo !== 'null' && item.logo !== 'N/A') {
-      art.push({ src: item.logo, sizes: '512x512', type: 'image/png' });
+      art.push({ src: item.logo, sizes: '512x512' }); // tipul real variază (png/jpg/svg)
     }
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
@@ -1530,7 +1580,9 @@ function parseM3U(text) {
     if (line.startsWith('#EXTINF:')) {
       meta = line;
     } else if (meta && line && !line.startsWith('#')) {
-      const name  = (meta.match(/,(.+)$/)             || [])[1]?.trim() || 'Unknown';
+      // Eliminăm atributele key="val" înainte de a căuta virgula numelui —
+      // altfel group-title="News,Sports" taie numele greșit.
+      const name  = (meta.replace(/[\w-]+="[^"]*"/g, '').match(/,(.+)$/) || [])[1]?.trim() || 'Unknown';
       const logoRaw = (meta.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
       const logo  = (logoRaw === 'null' || logoRaw === 'N/A') ? '' : logoRaw;
       const ctry  = (meta.match(/tvg-country="([^"]*)"/) || [])[1] || state.currentTvCountry.toUpperCase();
@@ -1601,9 +1653,10 @@ function _fetchTimeout(url, ms, opts) {
 // Testează un singur stream. true = pare funcțional.
 async function probeStream(url) {
   const isHls = url.includes('.m3u8');
-  // 1) Direct — merge dacă serverul trimite CORS
+  // 1) Direct — merge dacă serverul trimite CORS (pe HTTPS testăm varianta https,
+  //    exact cum o va reda player-ul)
   try {
-    const res = await _fetchTimeout(url, HEALTH_TIMEOUT);
+    const res = await _fetchTimeout(upgradeUrl(url), HEALTH_TIMEOUT);
     if (res.ok) {
       if (isHls) { const t = await res.text(); return /#EXTM3U/i.test(t); }
       return true;
@@ -1815,11 +1868,7 @@ function getCurrentSource() {
   if (state.mode === 'tv') return state.tvList;
   if (state.mode === 'radio') return state.radioList;
   if (state.mode === 'playlist') return state.playlistList;
-  if (state.mode === 'fav') {
-    const favTv = state.tvList.filter(c => state.favorites.tv.includes(c.id));
-    const favRadio = state.radioList.filter(c => state.favorites.radio.includes(c.id));
-    return [...favTv.map(c => ({...c, _type:'tv'})), ...favRadio.map(c => ({...c, _type:'radio'}))];
-  }
+  if (state.mode === 'fav') return getFavoriteList();
   if (state.mode === 'recent') return state.recent;
   return [];
 }
@@ -2020,10 +2069,37 @@ function setVolumeFill(pct) {
 function stopAll() {
   hideSpinner();
   clearTimeout(_radioReconnectTimer);
+  clearTimeout(_tvWatchdog);
   if (state.hls) { state.hls.destroy(); state.hls = null; }
   video.pause(); video.removeAttribute('src'); video.load();
-  audio.pause(); audio.removeAttribute('src');
+  // load() după scoaterea src oprește efectiv descărcarea stream-ului vechi
+  audio.pause(); audio.removeAttribute('src'); audio.load();
 }
+
+// Pagina e servită pe HTTPS (Vercel) → cererile XHR/fetch către http:// sunt blocate
+// (mixed content). Încercăm varianta https a aceluiași server.
+const IS_HTTPS = location.protocol === 'https:';
+function upgradeUrl(url) {
+  return (IS_HTTPS && /^http:\/\//i.test(url)) ? 'https://' + url.slice(7) : url;
+}
+const isHlsUrl = (url) => /\.m3u8(\?|#|$)/i.test(url) || url.includes('.m3u8');
+const hlsAvailable = () => typeof window.Hls !== 'undefined' && window.Hls.isSupported();
+
+// Instanță hls.js cu rescriere http→https pentru manifest + segmente
+function createHls() {
+  return new Hls({
+    enableWorker: true,
+    xhrSetup: (xhr, url) => {
+      const up = upgradeUrl(url);
+      if (up !== url) xhr.open('GET', up, true);
+      xhr.timeout = 10000;
+    },
+  });
+}
+
+// Watchdog: dacă un canal TV nu pornește în 20s (fără eroare explicită), trecem mai departe
+let _tvWatchdog = null;
+const TV_START_TIMEOUT = 20000;
 
 // Expus pentru notificarea media (apelat din Kotlin)
 window.__broadcastStop = function () {
@@ -2111,12 +2187,19 @@ function handleTvFailure(item) {
   if (!state.current || state.current.id !== item.id) return;
   if ((state.current._type || state.mode) !== 'tv') return;
 
+  clearTimeout(_tvWatchdog);
+  hideSpinner();
   if (_tvSkipCount >= TV_SKIP_LIMIT) {
     _tvSkipCount = 0;
     toast(`Prea multe canale indisponibile la rând — oprit`);
     return;
   }
-  hideSpinner();
+  // Ultimul canal din listă: nu are unde sări (altfel ar relua același canal în buclă)
+  const idx = state.filtered.findIndex(c => c.id === item.id);
+  if (idx < 0 || idx >= state.filtered.length - 1) {
+    toast(`${item.name} indisponibil`);
+    return;
+  }
   _tvSkipCount++;
   toast(`⏭ ${item.name} indisponibil — sar la următorul (${_tvSkipCount})`);
   setTimeout(() => {
@@ -2130,31 +2213,43 @@ function playTV(item) {
   // Redarea e inițiată de user (click) → politica autoplay permite sunet.
   // Aplicăm preferința de mute, implicit NEmutat (fix „fără sunet pe PC").
   video.muted = state.muted;
-  if (Hls.isSupported() && url.includes('.m3u8')) {
-    state.hls = new Hls({ enableWorker: true, xhrSetup: xhr => { xhr.timeout = 10000; } });
-    state.hls.loadSource(url);
-    state.hls.attachMedia(video);
-    let retried = false;
-    state.hls.on(Hls.Events.ERROR, (_, data) => {
-      if (data.fatal) {
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !retried) {
-          retried = true;
-          state.hls.startLoad();
-        } else {
-          toast(data.type === Hls.ErrorTypes.MEDIA_ERROR
-            ? 'Flux video incompatibil sau corupt. Se încearcă următorul canal.'
-            : 'Conexiunea cu postul TV a eșuat. Se încearcă următorul canal.');
-          handleTvFailure(item);
-        }
+  clearTimeout(_tvWatchdog);
+  // Anulat de evenimentul 'playing'; dacă expiră, canalul n-a pornit niciodată
+  _tvWatchdog = setTimeout(() => {
+    if (state.current && state.current.id === item.id) handleTvFailure(item);
+  }, TV_START_TIMEOUT);
+
+  if (isHlsUrl(url) && hlsAvailable()) {
+    const hls = state.hls = createHls();
+    hls.loadSource(url);
+    hls.attachMedia(video);
+    let netRetries = 0, mediaRecovered = false;
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      if (!data.fatal || state.hls !== hls) return;
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR && netRetries < 2) {
+        netRetries++;
+        hls.startLoad();
+      } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !mediaRecovered) {
+        mediaRecovered = true;          // o singură încercare de recuperare decoder
+        hls.recoverMediaError();
+      } else {
+        toast(data.type === Hls.ErrorTypes.MEDIA_ERROR
+          ? 'Flux video incompatibil sau corupt. Se încearcă următorul canal.'
+          : 'Conexiunea cu postul TV a eșuat. Se încearcă următorul canal.');
+        handleTvFailure(item);
       }
     });
-    video.play().catch(()=>{});
-  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = url;
-    video.play().catch(() => handleTvFailure(item));
+    // Redare reușită → resetăm contoarele, ca o cădere ulterioară să poată fi reîncercată
+    hls.on(Hls.Events.FRAG_LOADED, () => { netRetries = 0; });
+    video.play().catch(() => {});
   } else {
-    video.src = url;
-    video.play().catch(() => handleTvFailure(item));
+    // Safari/iOS: HLS nativ; restul: mp4/ts direct
+    video.src = upgradeUrl(url);
+    video.play().catch((e) => {
+      // NotAllowedError = autoplay blocat, nu stream mort
+      if (e && e.name === 'NotAllowedError') { clearTimeout(_tvWatchdog); hideSpinner(); return; }
+      handleTvFailure(item);
+    });
   }
 }
 
@@ -2164,10 +2259,10 @@ function playRadio(item) {
   // createMediaElementSource ar reda SILENȚIOS pe desktop Chrome/Edge.
   // Folosim vizualizatorul „fake" (animat), care nu depinde de CORS → sunet garantat.
   audio.removeAttribute('crossorigin');
-  audio.src = item.url;
   audio.volume = $('volume').value / 100;
   audio.muted = state.muted;
   _radioReconnect = 0; // stație nouă → resetăm contorul de reconectare
+  loadRadioSource(item);
   audio.play()
     .then(() => {
       $('visualizer').classList.remove('paused');
@@ -2177,6 +2272,22 @@ function playRadio(item) {
       toast(`Nu se poate porni ${item.name}. Verifică internetul sau încearcă altă stație.`);
       $('visualizer').classList.add('paused');
     });
+}
+
+// Unele stații radio sunt HLS (.m3u8) — <audio> le redă nativ doar în Safari,
+// deci în Chrome/Firefox/Android le trecem prin hls.js.
+function loadRadioSource(item) {
+  if (state.hls) { state.hls.destroy(); state.hls = null; }
+  if (isHlsUrl(item.url) && hlsAvailable()) {
+    const hls = state.hls = createHls();
+    hls.loadSource(item.url);
+    hls.attachMedia(audio);
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      if (data.fatal && state.hls === hls) reconnectRadio();
+    });
+  } else {
+    audio.src = item.url; // browserele upgradează singure audio http→https
+  }
 }
 
 // ---- Reconectare automată radio ----
@@ -2198,7 +2309,7 @@ function reconnectRadio() {
   clearTimeout(_radioReconnectTimer);
   _radioReconnectTimer = setTimeout(() => {
     if (!state.current || state.current.id !== item.id) return; // user-ul a schimbat
-    audio.src = item.url;
+    loadRadioSource(item);
     audio.muted = state.muted;
     audio.volume = $('volume').value / 100;
     audio.play()
@@ -2258,13 +2369,33 @@ document.querySelectorAll('.pl-tab').forEach(btn => {
   });
 });
 
-$('mode-playlist').addEventListener('click', () => {
-  if (state.playlistList.length) {
-    switchMode('playlist');
-  } else {
-    $('playlist-dialog').classList.add('open');
-    $('pl-m3u-url').focus();
+function openPlaylistDialog() {
+  const saved = _lsGet('tr-playlist-url', '');
+  if (saved && !$('pl-m3u-url').value) $('pl-m3u-url').value = saved;
+  $('playlist-dialog').classList.add('open');
+  $('pl-m3u-url').focus();
+}
+
+$('mode-playlist').addEventListener('click', async () => {
+  // Click din nou pe tab-ul activ → încarcă alt playlist
+  if (state.mode === 'playlist') { openPlaylistDialog(); return; }
+  if (state.playlistList.length) { switchMode('playlist'); return; }
+  // Playlist salvat din sesiunea trecută → îl reîncărcăm automat
+  const saved = _lsGet('tr-playlist-url', '');
+  if (saved) {
+    try {
+      renderSkeleton();
+      state.playlistList = await loadPlaylistFromUrl(saved);
+      state.playlistName = _lsGet('tr-playlist-name', 'Playlist');
+      $('mode-playlist').textContent = state.playlistName.toUpperCase().slice(0, 12);
+      switchMode('playlist');
+      return;
+    } catch (e) {
+      toast(`Playlist-ul salvat nu s-a putut încărca: ${e.message}`);
+      applyFilter();
+    }
   }
+  openPlaylistDialog();
 });
 
 $('pl-cancel').addEventListener('click', () => $('playlist-dialog').classList.remove('open'));
@@ -2281,12 +2412,16 @@ $('pl-load').addEventListener('click', async () => {
     const user   = $('pl-xt-user').value.trim();
     const pass   = $('pl-xt-pass').value.trim();
     if (!server || !user || !pass) { toast('Completează toate câmpurile Xtream'); return; }
-    m3uUrl = `${server}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=ts`;
-    state.playlistName = new URL(server).hostname;
+    // Fără protocol, new URL() aruncă eroare — adăugăm http:// implicit
+    const base = /^https?:\/\//i.test(server) ? server : 'http://' + server;
+    try { state.playlistName = new URL(base).hostname; }
+    catch (_) { toast('Adresa serverului Xtream nu este validă'); return; }
+    m3uUrl = `${base}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=ts`;
   } else {
     m3uUrl = $('pl-m3u-url').value.trim();
     if (!m3uUrl) { toast('Introdu URL-ul M3U'); return; }
-    try { state.playlistName = new URL(m3uUrl).hostname; } catch(_) { state.playlistName = 'Playlist'; }
+    try { state.playlistName = new URL(m3uUrl).hostname; }
+    catch (_) { toast('URL-ul M3U nu este valid'); return; }
   }
 
   $('pl-load').textContent = '⏳ Se încarcă...';
@@ -2296,6 +2431,9 @@ $('pl-load').addEventListener('click', async () => {
     const list = await loadPlaylistFromUrl(m3uUrl);
     if (!list.length) throw new Error('Lista goală sau format invalid');
     state.playlistList = list;
+    // Reținem playlist-ul (doar pe acest dispozitiv) ca să nu fie reintrodus la fiecare pornire
+    _lsSet('tr-playlist-url', m3uUrl);
+    _lsSet('tr-playlist-name', state.playlistName);
     $('playlist-dialog').classList.remove('open');
     $('mode-playlist').textContent = `${state.playlistName.toUpperCase().slice(0,12)}`;
     switchMode('playlist');
@@ -2444,12 +2582,9 @@ $('channel-list').addEventListener('click', (e) => {
     const type = fav.dataset.type;
     const item = state.filtered[idx];
     if (!item) return;
-    const arr = state.favorites[type] = state.favorites[type] || [];
-    const pos = arr.indexOf(item.id);
-    if (pos >= 0) arr.splice(pos, 1);
-    else arr.push(item.id);
-    localStorage.setItem('broadcast-favs', JSON.stringify(state.favorites));
-    fav.classList.toggle('is-fav');
+    const added = toggleFavorite(item, type);
+    fav.classList.toggle('is-fav', added);
+    fav.setAttribute('aria-label', added ? 'Elimină din favorite' : 'Adaugă la favorite');
     if (state.mode === 'fav') applyFilter();
     return;
   }
@@ -2480,13 +2615,18 @@ $('play-btn').addEventListener('click', () => {
   const isTv = (state.current._type || state.mode) === 'tv';
   const el = isTv ? video : audio;
   if (el.paused) {
-    el.play();
+    el.play().catch(() => {
+      // Stream-ul live a expirat cât a stat pe pauză → îl reîncărcăm de la zero
+      if (state.current) play(state.current);
+    });
     $('play-btn').textContent = '⏸';
     $('play-btn').setAttribute('aria-label', 'Pauză');
     $('visualizer')?.classList.remove('paused');
     Bridge.notifyPlaying(state.current, isTv);
   } else {
     el.pause();
+    clearTimeout(_tvWatchdog); // pauză voluntară ≠ canal mort
+    hideSpinner();
     $('play-btn').textContent = '▶';
     $('play-btn').setAttribute('aria-label', 'Redă');
     $('visualizer')?.classList.add('paused');
@@ -2669,7 +2809,7 @@ video.addEventListener('error', () => {
 });
 
 // Canal pornit cu succes → resetăm contorul de auto-skip și ascundem spinner-ul
-video.addEventListener('playing', () => { _tvSkipCount = 0; hideSpinner(); });
+video.addEventListener('playing', () => { _tvSkipCount = 0; clearTimeout(_tvWatchdog); hideSpinner(); });
 video.addEventListener('canplay', hideSpinner);
 
 // (Fostul handler „unmute la primul click" a fost eliminat — acum dezactivăm
@@ -2744,10 +2884,29 @@ document.addEventListener('focusout', () => {
   });
 });
 
-document.addEventListener('keydown', (e) => {
-  if (_anyInputFocused || document.activeElement.tagName === 'INPUT') return;
+// Taste consumate de navigarea „telecomandă" — restul (Tab, F5, Ctrl+…) rămân la browser
+const _TV_KEYS = new Set([
+  'Enter', 'NumpadEnter', 'Space', 'MediaPlayPause', 'ArrowUp', 'ArrowDown',
+  'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'ChannelUp', 'ChannelDown',
+  'MediaTrackNext', 'MediaTrackPrevious', 'KeyM',
+]);
 
-  const active = document.activeElement;
+document.addEventListener('keydown', (e) => {
+  // Dialog deschis: Escape / Back îl închide, altfel tastele merg în dialog
+  const openDlg = document.querySelector('.custom-dialog.open');
+  if (openDlg) {
+    if (e.key === 'Escape' || e.key === 'GoBack' || e.key === 'BrowserBack') {
+      e.preventDefault();
+      openDlg.classList.remove('open');
+    }
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const tag = document.activeElement?.tagName;
+  // SELECT inclus: săgețile trebuie să schimbe opțiunea, nu canalul
+  if (_anyInputFocused || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+  const active = document.activeElement || document.body;
   const inTab  = !!active.closest?.('.mode-toggle');
   const inList = !!active.closest?.('#channel-list');
   const inCtrl = !!active.closest?.('.np-controls');
@@ -2770,10 +2929,12 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // ---- TV: toate tastele sunt consumate ----
+  // ---- TV: consumăm doar tastele de navigare ----
+  const code = e.code || e.key;
+  if (!_TV_KEYS.has(code)) return;
   e.preventDefault();
 
-  switch (e.code) {
+  switch (code) {
 
     // OK / Enter
     case 'Enter':
