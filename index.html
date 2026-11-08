@@ -2822,7 +2822,13 @@ $('mute-btn').addEventListener('click', () => {
 });
 
 window.addEventListener('offline', () => toast('Ești offline. Interfața rămâne disponibilă, dar streamurile necesită internet.'));
-window.addEventListener('online', () => toast('Conexiunea la internet a revenit.'));
+window.addEventListener('online', () => {
+  toast('Conexiunea la internet a revenit.');
+  // Lista goală (ex. TV box pornit înainte de Wi-Fi) → o reîncărcăm automat
+  if ((state.mode === 'tv' && !state.tvList.length) || (state.mode === 'radio' && !state.radioList.length)) {
+    switchMode(state.mode);
+  }
+});
 
 $('fullscreen-btn').addEventListener('click', () => {
   const wrap = document.querySelector('.player-wrap');
