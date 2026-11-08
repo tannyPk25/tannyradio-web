@@ -49,6 +49,7 @@
         <select id="genre-select" class="genre-hidden" title="Filtrează după gen" aria-label="Filtrează după gen">
           <option value="">// toate genurile</option>
         </select>
+        <button type="button" id="edit-open" class="sync-btn">✎ Editează lista</button>
         <button type="button" id="digi-open" class="sync-btn hidden">📺 Digi Online (aplicația oficială)</button>
         <button type="button" id="sync-open" class="sync-btn hidden">⇄ Sincronizează cu alt dispozitiv</button>
         <div class="tv-health-row" id="tv-health-row">
@@ -111,6 +112,7 @@
         <button class="ctrl-btn" id="mute-btn" type="button" title="Mute/Unmute" aria-label="Dezactivează sunetul">🔊</button>
         <button class="ctrl-btn" id="sleep-btn" type="button" title="Sleep timer" aria-label="Temporizator oprire">⏰</button>
         <button class="ctrl-btn" id="custom-btn" type="button" title="Redă URL custom" aria-label="Deschide un URL personalizat">⌨</button>
+        <button class="ctrl-btn" id="settings-btn" type="button" title="Setări" aria-label="Setări">⚙</button>
         <button class="ctrl-btn" id="share-btn" type="button" title="Partajează" aria-label="Partajează canalul curent">⤴</button>
         <button class="ctrl-btn" id="fullscreen-btn" type="button" title="Fullscreen" aria-label="Ecran complet">⛶</button>
         <div class="volume-wrap">
@@ -162,6 +164,35 @@
     <div class="custom-dialog-btns">
       <button type="button" id="sleep-cancel-timer">Anulează timer</button>
       <button type="button" id="sleep-close">Închide</button>
+    </div>
+  </div>
+</div>
+
+<div class="custom-dialog" id="settings-dialog" role="dialog" aria-modal="true" aria-label="Setări">
+  <div class="custom-dialog-box">
+    <div class="custom-dialog-title">SETĂRI</div>
+    <label class="set-row"><input type="checkbox" id="set-startlast"> Pornește pe ultimul canal (aplicația Android)</label>
+    <label class="set-row"><input type="checkbox" id="set-adult"> Ascunde canalele pentru adulți</label>
+    <button type="button" id="set-unhide" class="sync-btn">↺ Arată din nou canalele ascunse</button>
+    <div class="custom-dialog-hint">Ascunzi un canal din <b>✎ Editează lista</b> (butonul 🚫, sau OK pe TV).
+      În FAVORITE, tot acolo schimbi ordinea (▲▼, sau ← → pe TV).</div>
+    <div class="custom-dialog-hint" id="set-pin-status"></div>
+    <input type="password" id="set-pin" inputmode="numeric" maxlength="4" placeholder="PIN nou (4 cifre, gol = fără PIN)" autocomplete="off">
+    <div class="custom-dialog-btns">
+      <button type="button" id="set-pin-save">Salvează PIN</button>
+      <button type="button" id="settings-close">Închide</button>
+    </div>
+  </div>
+</div>
+
+<div class="custom-dialog" id="pin-dialog" role="dialog" aria-modal="true" aria-label="PIN">
+  <div class="custom-dialog-box">
+    <div class="custom-dialog-title">INTRODU PIN-UL</div>
+    <div class="custom-dialog-hint" id="pin-reason"></div>
+    <input type="password" id="pin-input" inputmode="numeric" maxlength="4" placeholder="PIN" autocomplete="off">
+    <div class="custom-dialog-btns">
+      <button type="button" id="pin-cancel">Anulează</button>
+      <button type="button" id="pin-ok">OK</button>
     </div>
   </div>
 </div>

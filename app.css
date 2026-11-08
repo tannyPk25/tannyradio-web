@@ -1073,3 +1073,12 @@
   .sync-code { font-family: 'JetBrains Mono', monospace; font-size: 34px; letter-spacing: .3em; text-align: center; color: var(--neon-amber); min-height: 8px; }
   #sync-input { text-transform: uppercase; letter-spacing: .3em; text-align: center; font-size: 20px; }
   .channel.load-more .channel-name { text-align: center; color: var(--neon-cyan); }
+
+/* Editare listă + setări */
+.edit-btn { padding: 6px 10px; margin-left: 4px; border: 1px solid var(--grid-line); border-radius: 8px;
+  cursor: pointer; color: var(--neon-cyan); font-size: 14px; user-select: none; }
+.edit-btn:hover { border-color: var(--neon-cyan); }
+#edit-open.active { color: var(--bg-deep); background: var(--neon-cyan); border-style: solid; }
+.set-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-primary); cursor: pointer; }
+.set-row input { width: 18px; height: 18px; }
+#set-unhide:disabled { opacity: .45; cursor: default; }

@@ -6,7 +6,7 @@
  *  - stream-uri, API-uri, logo-uri, CDN, fonturi (cross-origin): fără cache, doar network
  * Bump versiunea ca să invalidezi cache-ul vechi la fiecare release de shell.
  */
-const CACHE = 'tmedia-v10';
+const CACHE = 'tmedia-v11';
 const SHELL = [
   '/', '/index.html', '/app.css', '/app.js', '/design-refresh.css', '/manifest.json', '/icon.svg',
   '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',

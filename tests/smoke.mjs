@@ -53,6 +53,43 @@ try {
   // Lista TV se încarcă (depinde de iptv-org — tolerăm rețea lentă)
   const tvLoaded = await page.waitForFunction(() => state.tvList.length > 0, { timeout: 45000 }).then(() => true, () => false);
   ok(tvLoaded, 'lista TV se încarcă');
+  // ---------- Funcții 1.6: ultimul canal, coadă, favorite, ascundere + PIN ----------
+  const f16 = await page.evaluate(async () => {
+    const r = {};
+    const [a, b2, c] = state.tvList;
+    // play() poate porni redarea; ne interesează doar logica de listă
+    state.mode = 'tv'; state.tvOnlyWorking = false; applyFilter();
+    state.queue = state.filtered.slice();
+    play(a); play(b2);
+    r.prevIsA = state.prevItem && state.prevItem.id === a.id;
+    r.lastOk = window.__broadcastLast() && state.current.id === a.id;
+    // favorite: adaug 3, mut al treilea în sus
+    state.favorites = { tv: [], radio: [] }; state.favItems = { tv: {}, radio: {} };
+    [a, b2, c].forEach(x => toggleFavorite(x, 'tv'));
+    await switchMode('fav');
+    const third = state.filtered[2];
+    editAction(third, null, 'up');
+    r.reorder = state.favorites.tv[1] === c.id;
+    // ascundere + PIN
+    await switchMode('tv');
+    const victim = state.filtered[0];
+    editAction(victim, null, 'hide');
+    r.hidden = !state.filtered.some(x => x.id === victim.id);
+    SETTINGS.pinHash = _pinHash('1234');
+    setTimeout(() => { $('pin-input').value = '0000'; $('pin-ok').click(); }, 50);
+    r.wrongPin = (await requirePin('test')) === false;
+    setTimeout(() => { $('pin-input').value = '1234'; $('pin-ok').click(); }, 50);
+    r.goodPin = (await requirePin('test')) === true;
+    HIDDEN.tv = []; SETTINGS.pinHash = ''; saveHidden(); saveSettings(); applyFilter();
+    r.unhidden = state.filtered.some(x => x.id === victim.id);
+    stopAll();
+    return r;
+  });
+  ok(f16.prevIsA && f16.lastOk, 'Back: revine la canalul anterior', JSON.stringify(f16));
+  ok(f16.reorder, 'favoritele se pot reordona');
+  ok(f16.hidden && f16.unhidden, 'canalele se pot ascunde și readuce');
+  ok(f16.wrongPin && f16.goodPin, 'PIN: refuză PIN greșit, acceptă PIN corect');
+
   ok(errors.length === 0, 'fără erori JavaScript (desktop)', errors.join(' | '));
 
   // ---------- TV (telecomandă) ----------

@@ -1,4 +1,19 @@
 /* TMedia — logica aplicației (player, liste, navigare TV, sincronizare) */
+// ============= RAPORTARE ERORI (doar în aplicația Android, prin Sentry) =============
+(function () {
+  let sent = 0;
+  const report = (msg, stack) => {
+    if (sent >= 5) return; // maxim 5 rapoarte pe sesiune
+    try {
+      if (window.AndroidBridge && typeof window.AndroidBridge.reportJsError === 'function') {
+        sent++; window.AndroidBridge.reportJsError(String(msg || 'eroare'), String(stack || ''));
+      }
+    } catch (_) {}
+  };
+  window.addEventListener('error', (e) => { if (e.error || e.message) report(e.message, e.error && e.error.stack); });
+  window.addEventListener('unhandledrejection', (e) => report('Promise: ' + (e.reason && e.reason.message || e.reason), e.reason && e.reason.stack));
+})();
+
 // ============= SERVICE WORKER (PWA offline) =============
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -48,6 +63,30 @@ function _snapshot(item, type) {
 }
 
 const _favIds = _lsJson('broadcast-favs', {});
+
+// ============= SETĂRI =============
+// startLast: la pornire redă ultimul canal (doar în aplicația Android)
+// hideAdult: ascunde canalele pentru adulți   ·   pinHash: PIN pentru canalele ascunse
+const SETTINGS = Object.assign(
+  { startLast: /TannyRadioTV/i.test(navigator.userAgent), hideAdult: true, pinHash: '' },
+  _lsJson('tr-settings', {})
+);
+function saveSettings() { _lsSet('tr-settings', SETTINGS); }
+
+// Canale ascunse de utilizator (per tip)
+const HIDDEN = Object.assign({ tv: [], radio: [] }, _lsJson('tr-hidden', {}));
+function saveHidden() { _lsSet('tr-hidden', HIDDEN); }
+
+// Hash simplu (FNV-1a) pentru PIN — protecție locală împotriva copiilor, nu criptografie
+function _pinHash(pin) {
+  let h = 0x811c9dc5;
+  for (const ch of 'tmedia:' + pin) { h ^= ch.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16);
+}
+const ADULT_RE = /\b(xxx|adult|adults|18\+|erotic|porn|sex)\b/i;
+function isAdult(c) {
+  return ADULT_RE.test(c.name || '') || (c.categories || []).some(g => ADULT_RE.test(g)) || ADULT_RE.test(c.tags || '');
+}
 
 const state = {
   mode: 'tv',           // 'tv' | 'radio' | 'playlist' | 'fav'
@@ -643,6 +682,16 @@ function epgNowNext(id) {
   return { now: list[i], next: list[i + 1] || null };
 }
 const _hm = (t) => new Date(t * 1000).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+// Text pentru player-ul nativ: „Acum: X · 20:00 Y”
+function epgLine(item) {
+  const e = item && epgNowNext(item.id);
+  if (!e) return '';
+  return `Acum: ${e.now[2]}` + (e.next ? ` · ${_hm(e.next[0])} ${e.next[2]}` : '');
+}
+function updateNativeEpg() {
+  if (!state.nativeActive || !state.current) return;
+  try { window.AndroidBridge.updateNativeInfo && window.AndroidBridge.updateNativeInfo(epgLine(state.current)); } catch (_) {}
+}
 function updateNpEpg() {
   const c = state.current;
   if (!c || (c._type || state.mode) !== 'tv') return;
@@ -651,7 +700,7 @@ function updateNpEpg() {
   $('np-subtitle').textContent = `▶ ${e.now[2]}` + (e.next ? ` · ${_hm(e.next[0])} ${e.next[2]}` : '');
 }
 // Reîmprospătăm „acum rulează" la fiecare minut
-setInterval(() => { if (EPG.data) updateNpEpg(); }, 60000);
+setInterval(() => { if (EPG.data) { updateNpEpg(); updateNativeEpg(); } }, 60000);
 
 // ============= RENDER =============
 function getCurrentSource() {
@@ -718,6 +767,15 @@ function applyFilter() {
   if (state.mode === 'tv' && state.tvOnlyWorking && !NativePlayer.available()) {
     const alive = list.filter(c => state.tvHealth[c.url] !== 'dead');
     if (alive.length) list = alive;
+  }
+  // Canale ascunse de utilizator și (opțional) cele pentru adulți
+  if (!state.showHidden) {
+    list = list.filter(c => {
+      const t = c._type || (state.mode === 'radio' ? 'radio' : 'tv');
+      if ((HIDDEN[t] || []).includes(c.id)) return false;
+      if (SETTINGS.hideAdult && isAdult(c)) return false;
+      return true;
+    });
   }
   if (search) {
     const q = _fold(search);
@@ -794,7 +852,11 @@ function renderList() {
           <div class="channel-name">${escapeHtml(c.name)}</div>
           <div class="channel-meta">${escapeHtml(meta)}</div>
         </div>
-        <span class="fav-star ${isFav?'is-fav':''}" data-fav="${i}" data-type="${type}" role="button" tabindex="0" aria-label="${isFav ? 'Elimină din favorite' : 'Adaugă la favorite'}">★</span>
+        ${state.editMode
+          ? (state.mode === 'fav'
+              ? `<span class="edit-btn" data-act="up" data-i="${i}" role="button" aria-label="Mută mai sus">▲</span><span class="edit-btn" data-act="down" data-i="${i}" role="button" aria-label="Mută mai jos">▼</span>`
+              : `<span class="edit-btn" data-act="hide" data-i="${i}" role="button" aria-label="Ascunde canalul">🚫</span>`)
+          : `<span class="fav-star ${isFav?'is-fav':''}" data-fav="${i}" data-type="${type}" role="button" tabindex="0" aria-label="${isFav ? 'Elimină din favorite' : 'Adaugă la favorite'}">★</span>`}
       </div>
     `;
   }).join('') + (remaining > 0
@@ -911,8 +973,7 @@ const NativePlayer = {
   },
   play(item) {
     state.nativeActive = true;
-    const sub = (item.country || '') + (item.bitrate ? ` · ${item.bitrate}kbps` : '');
-    window.AndroidBridge.playNative(item.url, item.name || '', sub);
+    window.AndroidBridge.playNative(item.url, item.name || '', epgLine(item) || (item.country || ''));
   },
   stop() {
     if (!state.nativeActive) return;
@@ -941,6 +1002,7 @@ window.__nativeClosed = function () {
 
 function stopAll(keepNative) {
   if (!keepNative) NativePlayer.stop();
+  if (state.radioNative) { try { window.AndroidBridge.stopRadio(); } catch (_) {} state.radioNative = false; }
   clearInterval(_npTimer);
   hideSpinner();
   clearTimeout(_radioReconnectTimer);
@@ -995,22 +1057,41 @@ window.__broadcastStop = function () {
   renderList();
 };
 
+// Lista în care navighează sus/jos din player: cea din care ai pornit canalul
+// (ex. FAVORITE), chiar dacă între timp ai schimbat tab-ul.
+function _queue() { return (state.queue && state.queue.length) ? state.queue : state.filtered; }
+
 window.__broadcastNext = function () {
-  if (!state.filtered.length) return;
-  const idx = state.current ? state.filtered.findIndex(i => i.id === state.current.id) : -1;
-  const next = state.filtered[Math.min(idx + 1, state.filtered.length - 1)];
+  const q = _queue();
+  if (!q.length) return;
+  const idx = state.current ? q.findIndex(i => i.id === state.current.id) : -1;
+  const next = q[Math.min(idx + 1, q.length - 1)];
   if (next) play(next);
 };
 
 window.__broadcastPrev = function () {
-  if (!state.filtered.length) return;
-  const idx = state.current ? state.filtered.findIndex(i => i.id === state.current.id) : 0;
-  const prev = state.filtered[Math.max(idx - 1, 0)];
+  const q = _queue();
+  if (!q.length) return;
+  const idx = state.current ? q.findIndex(i => i.id === state.current.id) : 0;
+  const prev = q[Math.max(idx - 1, 0)];
   if (prev) play(prev);
+};
+
+// Back scurt în player (TV): canalul anterior. true = am comutat.
+window.__broadcastLast = function () {
+  const p = state.prevItem;
+  if (!p || (state.current && p.id === state.current.id)) return false;
+  play(p);
+  return true;
 };
 
 function play(item) {
   const nextType = item._type || state.mode;
+  // Ținem minte canalul de dinainte (pentru „ultimul canal” cu Back)
+  if (state.current && state.current.id !== item.id && !state.pendingResume) {
+    state.prevItem = { ...state.current, _type: state.current._type || state.mode };
+  }
+  if (!item._type) item = { ...item, _type: nextType };
   stopAll(nextType === 'tv' && NativePlayer.available());
   state.current = item;
   state.pendingResume = false;
@@ -1073,8 +1154,9 @@ function handleTvFailure(item) {
     return;
   }
   // Ultimul canal din listă: nu are unde sări (altfel ar relua același canal în buclă)
-  const idx = state.filtered.findIndex(c => c.id === item.id);
-  if (idx < 0 || idx >= state.filtered.length - 1) {
+  const q = _queue();
+  const idx = q.findIndex(c => c.id === item.id);
+  if (idx < 0 || idx >= q.length - 1) {
     toast(`${item.name} indisponibil`);
     return;
   }
@@ -1140,7 +1222,43 @@ function playTV(item) {
   }
 }
 
+// În aplicația Android radio-ul rulează în ExoPlayer (mai stabil cu ecranul stins,
+// melodia curentă vine direct din stream). În browser rămâne <audio>.
+const RadioNative = {
+  available() {
+    try { return !!(window.AndroidBridge && typeof window.AndroidBridge.playRadio === 'function'); }
+    catch (_) { return false; }
+  },
+};
+state.radioNative = false;
+window.__radioState = function (s) {
+  if (!state.radioNative) return;
+  if (s === 'playing') { _radioReconnect = 0; $('visualizer').classList.remove('paused'); Viz.start(); }
+  if (s === 'paused') $('visualizer').classList.add('paused');
+  if (s === 'error') reconnectRadio();
+};
+window.__radioTitle = function (t) {
+  const item = state.current;
+  if (!state.radioNative || !item) return;
+  t = (t || '').trim();
+  if (/^(https?:\/\/|www\.)|\.(ro|com|net|fm)$/i.test(t) || _fold(t) === _fold(item.name)) t = '';
+  const base = item.country + (item.bitrate ? ` · ${item.bitrate}kbps` : '');
+  $('np-subtitle').textContent = t ? `♪ ${t}` : base;
+  $('radio-tags').textContent = t ? `♪ ${t}` : (item.tags || '');
+};
+function radioVolume() { return state.muted ? 0 : $('volume').value / 100; }
+
 function playRadio(item) {
+  if (RadioNative.available()) {
+    state.radioNative = true;
+    _radioReconnect = 0;
+    try {
+      window.AndroidBridge.playRadio(item.url, item.name || '', item.country || '');
+      window.AndroidBridge.setRadioVolume(radioVolume());
+    } catch (_) {}
+    return;
+  }
+  state.radioNative = false;
   // IMPORTANT: NU folosim crossOrigin + Web Audio pentru captură.
   // Majoritatea stream-urilor radio nu trimit headere CORS, iar
   // createMediaElementSource ar reda SILENȚIOS pe desktop Chrome/Edge.
@@ -1223,6 +1341,7 @@ function reconnectRadio() {
   clearTimeout(_radioReconnectTimer);
   _radioReconnectTimer = setTimeout(() => {
     if (!state.current || state.current.id !== item.id) return; // user-ul a schimbat
+    if (state.radioNative) { try { window.AndroidBridge.playRadio(item.url, item.name || '', item.country || ''); } catch (_) {} return; }
     loadRadioSource(item);
     audio.muted = state.muted;
     audio.volume = $('volume').value / 100;
@@ -1532,6 +1651,13 @@ $('tv-recheck').addEventListener('click', async () => {
 });
 
 $('channel-list').addEventListener('click', (e) => {
+  const act = e.target.closest('[data-act]');
+  if (act) {
+    e.stopPropagation();
+    const item = state.filtered[+act.dataset.i];
+    if (item) editAction(item, act.closest('.channel'), act.dataset.act);
+    return;
+  }
   const fav = e.target.closest('[data-fav]');
   if (fav) {
     e.stopPropagation();
@@ -1551,7 +1677,10 @@ $('channel-list').addEventListener('click', (e) => {
   if (ch) {
     const idx = parseInt(ch.dataset.idx);
     const item = state.filtered[idx];
-    if (item) { _tvSkipCount = 0; play(item); } // selecție manuală → contor auto-skip resetat
+    if (!item) return;
+    if (state.editMode) { editAction(item, ch); return; }
+    state.queue = state.filtered.slice(); // sus/jos din player navighează în lista asta
+    _tvSkipCount = 0; play(item); // selecție manuală → contor auto-skip resetat
   }
 });
 
@@ -1576,6 +1705,13 @@ $('play-btn').addEventListener('click', () => {
   }
   const isTv = (state.current._type || state.mode) === 'tv';
   if (isTv && state.nativeActive) { NativePlayer.toggle(); return; }
+  if (!isTv && state.radioNative) {
+    let playing = true;
+    try { playing = window.AndroidBridge.toggleRadio(); } catch (_) {}
+    $('play-btn').textContent = playing ? '⏸' : '▶';
+    $('visualizer')?.classList.toggle('paused', !playing);
+    return;
+  }
   const el = isTv ? video : audio;
   if (el.paused) {
     el.play().catch(() => {
@@ -1661,6 +1797,7 @@ $('volume').addEventListener('input', (e) => {
   video.volume = v;
   audio.volume = v;
   setVolumeFill(+e.target.value);
+  if (state.radioNative) { try { window.AndroidBridge.setRadioVolume(radioVolume()); } catch (_) {} }
   try { localStorage.setItem('tr-volume', e.target.value); } catch (_) {}
 });
 
@@ -1722,6 +1859,7 @@ $('mute-btn').addEventListener('click', () => {
   video.muted = audio.muted = state.muted;
   $('mute-btn').textContent = state.muted ? '🔇' : '🔊';
   $('mute-btn').setAttribute('aria-label', state.muted ? 'Activează sunetul' : 'Dezactivează sunetul');
+  if (state.radioNative) { try { window.AndroidBridge.setRadioVolume(radioVolume()); } catch (_) {} }
   try { localStorage.setItem('tr-muted', state.muted ? '1' : '0'); } catch (_) {}
 });
 
@@ -1986,6 +2124,17 @@ document.addEventListener('keydown', (e) => {
   if (!_TV_KEYS.has(code)) return;
   e.preventDefault();
 
+  // Mod editare pe un rând din listă: ← / → mută favoritul, OK ascunde canalul
+  if (state.editMode && inList && active.classList.contains('channel') && !active.dataset.more) {
+    const item = state.filtered[+active.dataset.idx];
+    if (item && state.mode === 'fav' && (code === 'ArrowLeft' || code === 'ArrowRight')) {
+      editAction(item, active, code === 'ArrowLeft' ? 'up' : 'down'); return;
+    }
+    if (item && state.mode !== 'fav' && (code === 'Enter' || code === 'NumpadEnter')) {
+      editAction(item, active, 'hide'); return;
+    }
+  }
+
   switch (code) {
 
     // OK / Enter
@@ -2151,6 +2300,101 @@ function restoreLastPlayed() {
   $('play-btn').textContent = '▶';
 }
 
+// ============= EDITARE LISTĂ (ordine favorite / ascundere canale) =============
+function setEditMode(on) {
+  state.editMode = !!on;
+  $('edit-open').textContent = state.editMode ? '✓ Gata cu editarea' : '✎ Editează lista';
+  $('edit-open').classList.toggle('active', state.editMode);
+  renderList();
+}
+$('edit-open').addEventListener('click', () => setEditMode(!state.editMode));
+
+function moveFavorite(item, delta) {
+  const t = item._type || 'tv';
+  const arr = state.favorites[t];
+  const i = arr.indexOf(item.id), j = i + delta;
+  if (i < 0 || j < 0 || j >= arr.length) return false;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  _lsSet('broadcast-favs', state.favorites);
+  return true;
+}
+
+// act: 'up' | 'down' | 'hide' (implicit: ascunde în liste, nimic în favorite)
+function editAction(item, row, act) {
+  if (state.mode === 'fav') {
+    if (act !== 'up' && act !== 'down') return;
+    const pos = state.filtered.indexOf(item);
+    if (moveFavorite(item, act === 'up' ? -1 : 1)) {
+      applyFilter();
+      const newIdx = state.filtered.findIndex(c => c.id === item.id);
+      requestAnimationFrame(() => _tvFocusList(newIdx >= 0 ? newIdx : pos));
+    }
+    return;
+  }
+  const t = item._type || (state.mode === 'radio' ? 'radio' : 'tv');
+  if (!HIDDEN[t].includes(item.id)) HIDDEN[t].push(item.id);
+  saveHidden();
+  const pos = state.filtered.indexOf(item);
+  applyFilter();
+  toast(`🚫 ${item.name} ascuns — îl poți readuce din ⚙ Setări`);
+  requestAnimationFrame(() => _tvFocusList(Math.min(pos, state.filtered.length - 1)));
+  updateSettingsUi();
+}
+
+// ============= SETĂRI (dialog) =============
+function hiddenCount() { return HIDDEN.tv.length + HIDDEN.radio.length; }
+function updateSettingsUi() {
+  $('set-startlast').checked = !!SETTINGS.startLast;
+  $('set-adult').checked = !!SETTINGS.hideAdult;
+  $('set-unhide').textContent = `↺ Arată din nou canalele ascunse (${hiddenCount()})`;
+  $('set-unhide').disabled = !hiddenCount();
+  $('set-pin-status').textContent = SETTINGS.pinHash ? 'PIN activ 🔒' : 'Fără PIN';
+}
+
+// Cere PIN-ul (dacă e setat). Rezolvă true dacă e corect sau nu există PIN.
+function requirePin(reason) {
+  if (!SETTINGS.pinHash) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    $('pin-reason').textContent = reason;
+    $('pin-input').value = '';
+    $('pin-dialog').classList.add('open');
+    setTimeout(() => $('pin-input').focus(), 80);
+    const done = (ok) => { $('pin-dialog').classList.remove('open'); resolve(ok); };
+    $('pin-ok').onclick = () => {
+      const ok = _pinHash($('pin-input').value.trim()) === SETTINGS.pinHash;
+      if (!ok) toast('PIN greșit');
+      done(ok);
+    };
+    $('pin-cancel').onclick = () => done(false);
+  });
+}
+
+$('settings-btn').addEventListener('click', () => {
+  updateSettingsUi();
+  $('settings-dialog').classList.add('open');
+  if (_IS_TV_DEVICE) setTimeout(() => $('set-startlast').focus(), 80);
+});
+$('settings-close').addEventListener('click', () => $('settings-dialog').classList.remove('open'));
+$('set-startlast').addEventListener('change', (e) => { SETTINGS.startLast = e.target.checked; saveSettings(); });
+$('set-adult').addEventListener('change', async (e) => {
+  if (!e.target.checked && !(await requirePin('Dezactivezi filtrul pentru adulți'))) { e.target.checked = true; return; }
+  SETTINGS.hideAdult = e.target.checked; saveSettings(); applyFilter();
+});
+$('set-unhide').addEventListener('click', async () => {
+  if (!(await requirePin('Readuci canalele ascunse'))) return;
+  HIDDEN.tv = []; HIDDEN.radio = []; saveHidden();
+  updateSettingsUi(); applyFilter();
+  toast('Toate canalele sunt din nou vizibile');
+});
+$('set-pin-save').addEventListener('click', async () => {
+  const v = $('set-pin').value.trim();
+  if (v && !/^\d{4}$/.test(v)) { toast('PIN-ul trebuie să aibă 4 cifre'); return; }
+  if (SETTINGS.pinHash && !(await requirePin('Schimbi PIN-ul'))) return;
+  SETTINGS.pinHash = v ? _pinHash(v) : '';
+  saveSettings(); $('set-pin').value = ''; updateSettingsUi();
+  toast(v ? '🔒 PIN salvat' : 'PIN eliminat');
+});
+
 // ============= SINCRONIZARE FAVORITE =============
 let _syncEnabled = false;
 async function initSync() {
@@ -2162,6 +2406,8 @@ async function initSync() {
 }
 function updateSyncButton() {
   $('sync-open').classList.toggle('hidden', !(_syncEnabled && state.mode === 'fav'));
+  $('edit-open').classList.toggle('hidden', state.mode === 'recent');
+  if (state.editMode && state.mode === 'recent') setEditMode(false);
   // Digi Online: doar în aplicația Android, în modul TV
   let canDigi = false;
   try { canDigi = !!(window.AndroidBridge && typeof window.AndroidBridge.openPartnerApp === 'function'); } catch (_) {}
@@ -2281,9 +2527,15 @@ async function checkAppUpdate(force) {
 
     loadRadio(state.currentRadioCountry);
     setTimeout(() => checkAppUpdate(false), 4000);
-    loadEpg();
+    await Promise.race([loadEpg(), new Promise(r => setTimeout(r, 4000))]); // ghidul pentru eticheta playerului
     initSync();
     updateSyncButton();
+
+    // Pornire pe ultimul canal (doar în aplicația Android — browserele blochează redarea automată)
+    if (SETTINGS.startLast && window.AndroidBridge && state.current && state.pendingResume) {
+      state.pendingResume = false;
+      play(state.current);
+    }
   } catch (e) {
     console.error("Init error:", e);
     applyFilter();
