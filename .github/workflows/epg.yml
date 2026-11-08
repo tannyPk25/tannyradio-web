@@ -1,0 +1,33 @@
+name: Ghid TV (EPG)
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"   # la fiecare 6 ore
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: epg
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Construiește epg/ro.json
+        run: python scripts/build_epg.py epg/ro.json
+      - name: Publică dacă s-a schimbat
+        run: |
+          git config user.name "tmedia-epg-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add epg/ro.json
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(epg): actualizare ghid TV"
+          git pull --rebase origin main
+          git push origin HEAD:main

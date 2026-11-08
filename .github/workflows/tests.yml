@@ -1,0 +1,22 @@
+name: Teste
+
+on:
+  push:
+    branches: ["**"]
+    paths-ignore: ["epg/**"]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Instalează puppeteer-core (doar pentru teste)
+        run: npm install --no-save puppeteer-core@23.11.1
+      - name: Test de fum
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node tests/smoke.mjs

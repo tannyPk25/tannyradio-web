@@ -1,0 +1,8 @@
+{
+  "name": "tmedia-web",
+  "private": true,
+  "description": "TMedia - site + funcții Vercel (nowplaying, sync)",
+  "dependencies": {
+    "@vercel/blob": "2.8.2"
+  }
+}

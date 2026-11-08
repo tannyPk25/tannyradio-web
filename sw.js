@@ -6,9 +6,9 @@
  *  - stream-uri, API-uri, logo-uri, CDN, fonturi (cross-origin): fără cache, doar network
  * Bump versiunea ca să invalidezi cache-ul vechi la fiecare release de shell.
  */
-const CACHE = 'tmedia-v7';
+const CACHE = 'tmedia-v9';
 const SHELL = [
-  '/', '/index.html', '/design-refresh.css', '/manifest.json', '/icon.svg',
+  '/', '/index.html', '/app.css', '/app.js', '/design-refresh.css', '/manifest.json', '/icon.svg',
   '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
 ];
 
@@ -39,6 +39,17 @@ self.addEventListener('fetch', (event) => {
   // Cross-origin (stream-uri media, API radio/iptv, logo-uri, hls.js CDN, Google Fonts):
   // lăsăm browserul să gestioneze direct — nu cache-uim conținut dinamic/media.
   if (!sameOrigin) return;
+
+  // Date care se schimbă des (ghid TV, versiunea aplicației): mereu din rețea, cache doar offline
+  if (url.pathname.startsWith('/epg/') || url.pathname === '/version.json') {
+    event.respondWith(
+      fetch(req).then((res) => {
+        if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {}); }
+        return res;
+      }).catch(() => caches.match(req))
+    );
+    return;
+  }
 
   // Navigare HTML: network-first ca să prindem update-urile, fallback la cache offline.
   if (req.mode === 'navigate') {
