@@ -1079,6 +1079,15 @@
       outline-offset: 2px;
     }
   }
+  /* TV: inel de focus vizibil pe toate elementele navigabile cu telecomanda */
+  .tv-device .search-box input:focus, .tv-device .search-box select:focus,
+  .tv-device .search-box button:focus, .tv-device .channel:focus,
+  .tv-device .ctrl-btn:focus, .tv-device .mode-toggle button:focus,
+  .tv-device .custom-dialog-box input:focus, .tv-device .custom-dialog-box button:focus,
+  .tv-device .ow-toggle:focus-within {
+    outline: 3px solid var(--neon-cyan) !important;
+    outline-offset: 2px;
+  }
 </style>
 <link rel="stylesheet" href="design-refresh.css">
 </head>
@@ -1916,7 +1925,7 @@ function applyFilter() {
   // Doar canale funcționale — ascunde stream-urile confirmate moarte (TV).
   // Siguranță: dacă filtrul ar goli complet lista (verificare eșuată/proxy picat),
   // afișăm totuși tot, ca să nu rămână ecranul gol.
-  if (state.mode === 'tv' && state.tvOnlyWorking) {
+  if (state.mode === 'tv' && state.tvOnlyWorking && !NativePlayer.available()) {
     const alive = list.filter(c => state.tvHealth[c.url] !== 'dead');
     if (alive.length) list = alive;
   }
@@ -1980,7 +1989,7 @@ function renderList() {
       ? `<span class="ch-dot ${state.tvHealth[c.url] || ''}" title="stare stream"></span>`
       : '';
     return `
-      <div class="channel ${isActive?'active':''}" data-idx="${i}" role="option" aria-selected="${isActive}" aria-label="${escapeHtml(c.name)}, ${escapeHtml(meta)}">
+      <div class="channel ${isActive?'active':''}" data-idx="${i}" tabindex="0" role="option" aria-selected="${isActive}" aria-label="${escapeHtml(c.name)}, ${escapeHtml(meta)}">
         ${dotHtml}
         <div class="channel-logo ${c.logo?'':'fallback'}" data-fb="${fb}">${logoHtml}</div>
         <div class="channel-info">
@@ -2009,10 +2018,7 @@ function renderList() {
       const activeEl = list.querySelector('.channel.active');
       if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
-    list.querySelectorAll('.channel').forEach(el => {
-      el.setAttribute('tabindex', '0');
-      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.click(); });
-    });
+    // tabindex e pus direct în HTML (mai sus) ca focusul să meargă imediat după randare
   });
 }
 
@@ -2066,7 +2072,46 @@ function setVolumeFill(pct) {
 }
 
 // ============= PLAYBACK =============
-function stopAll() {
+// ============= PLAYER NATIV (doar în APK) =============
+// ExoPlayer din aplicația Android redă și ce WebView nu poate: stream-uri fără CORS,
+// http simplu și MPEG-TS brut (ex. PRO TV / Pro Cinema din feed-ul HbbTV oficial).
+const NativePlayer = {
+  available() {
+    try { return !!(window.AndroidBridge && typeof window.AndroidBridge.playNative === 'function'); }
+    catch (_) { return false; }
+  },
+  play(item) {
+    state.nativeActive = true;
+    const sub = (item.country || '') + (item.bitrate ? ` · ${item.bitrate}kbps` : '');
+    window.AndroidBridge.playNative(item.url, item.name || '', sub);
+  },
+  stop() {
+    if (!state.nativeActive) return;
+    state.nativeActive = false;
+    try { window.AndroidBridge.stopNative(); } catch (_) {}
+  },
+  toggle() { try { window.AndroidBridge.toggleNative(); } catch (_) {} },
+};
+
+// Callback-uri apelate din Kotlin
+window.__nativePlaying = function () { _tvSkipCount = 0; clearTimeout(_tvWatchdog); hideSpinner(); };
+window.__nativeError = function () {
+  if (state.current && state.nativeActive) handleTvFailure(state.current);
+};
+window.__nativeClosed = function () {
+  // Back pe player-ul nativ → revenim în listă, canalul rămâne selectat (▶ îl reia)
+  state.nativeActive = false;
+  clearTimeout(_tvWatchdog);
+  hideSpinner();
+  state.pendingResume = true;
+  $('play-btn').textContent = '▶';
+  $('play-btn').setAttribute('aria-label', 'Redă');
+  Bridge.notifyPaused();
+  if (_isTv()) _tvFocusList(_tvListIdx);
+};
+
+function stopAll(keepNative) {
+  if (!keepNative) NativePlayer.stop();
   hideSpinner();
   clearTimeout(_radioReconnectTimer);
   clearTimeout(_tvWatchdog);
@@ -2134,7 +2179,8 @@ window.__broadcastPrev = function () {
 };
 
 function play(item) {
-  stopAll();
+  const nextType = item._type || state.mode;
+  stopAll(nextType === 'tv' && NativePlayer.available());
   state.current = item;
   state.pendingResume = false;
   $('idle-state').classList.add('hidden');
@@ -2215,6 +2261,14 @@ function playTV(item) {
   video.muted = state.muted;
   clearTimeout(_tvWatchdog);
   // Anulat de evenimentul 'playing'; dacă expiră, canalul n-a pornit niciodată
+  if (NativePlayer.available()) {
+    video.pause();
+    _tvWatchdog = setTimeout(() => {
+      if (state.current && state.current.id === item.id && state.nativeActive) handleTvFailure(item);
+    }, 45000); // ExoPlayer raportează singur erorile reale; aici prindem doar blocajele
+    NativePlayer.play(item);
+    return;
+  }
   _tvWatchdog = setTimeout(() => {
     if (state.current && state.current.id === item.id) handleTvFailure(item);
   }, TV_START_TIMEOUT);
@@ -2602,6 +2656,10 @@ $('channel-list').addEventListener('keydown', (e) => {
     e.preventDefault();
     e.target.click();
   }
+  // Enter pe un canal focusat (tastatură desktop) — pe TV îl tratează handler-ul global
+  else if (e.key === 'Enter' && !_isTv() && e.target.matches('.channel')) {
+    e.target.click();
+  }
 });
 
 $('play-btn').addEventListener('click', () => {
@@ -2613,6 +2671,7 @@ $('play-btn').addEventListener('click', () => {
     return;
   }
   const isTv = (state.current._type || state.mode) === 'tv';
+  if (isTv && state.nativeActive) { NativePlayer.toggle(); return; }
   const el = isTv ? video : audio;
   if (el.paused) {
     el.play().catch(() => {
@@ -2826,7 +2885,52 @@ document.querySelectorAll('input').forEach(inp => {
 let _tvListIdx = 0;
 let _tvCtrlIdx = 1;
 
-function _isTv() { return window.innerWidth >= 950; }
+// TV real: APK-ul adaugă „TannyRadioTV" în user-agent pe Android TV. Lățimea singură
+// nu e de încredere — multe TV box-uri raportează < 950px în WebView, iar atunci
+// telecomanda nu putea comuta pe RADIO.
+const _IS_TV_DEVICE = /TannyRadioTV|Android TV|GoogleTV|AFT[A-Z]|BRAVIA|SMART-TV|SmartTV/i.test(navigator.userAgent);
+if (_IS_TV_DEVICE) document.documentElement.classList.add('tv-device');
+function _isTv() { return _IS_TV_DEVICE || window.innerWidth >= 950; }
+function _tvGetFilters() {
+  return Array.from(document.querySelectorAll('.search-box input, .search-box select, .search-box button'))
+    .filter(el => el.offsetParent !== null && !el.disabled);
+}
+function _tvFocusFilters(idx) {
+  const f = _tvGetFilters();
+  if (!f.length) return false;
+  f[Math.max(0, Math.min(idx, f.length - 1))].focus();
+  return true;
+}
+function _focusables(root) {
+  return Array.from(root.querySelectorAll('input, select, button'))
+    .filter(el => el.offsetParent !== null && !el.disabled);
+}
+// Mută focusul în listă de elemente (dialog / filtre), cu încadrare la capete
+function _moveIn(list, active, delta) {
+  const i = list.indexOf(active);
+  const n = i < 0 ? 0 : Math.max(0, Math.min(list.length - 1, i + delta));
+  list[n]?.focus();
+  return i < 0 ? 0 : i + delta;  // poate ieși din interval → apelantul decide zona următoare
+}
+// Selectul nu se poate deschide cu evenimente injectate → schimbăm opțiunea cu ← →
+function _stepSelect(sel, delta) {
+  const n = Math.max(0, Math.min(sel.options.length - 1, sel.selectedIndex + delta));
+  if (n !== sel.selectedIndex) {
+    sel.selectedIndex = n;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+}
+
+// Apelat din Kotlin la butonul Back: true = am consumat (dialog închis etc.)
+window.__broadcastBack = function () {
+  const dlg = document.querySelector('.custom-dialog.open');
+  if (dlg) { dlg.classList.remove('open'); _tvFocusList(_tvListIdx); return true; }
+  const a = document.activeElement;
+  if (a && (a.closest('.search-box') || a.closest('.np-controls') || a.closest('.mode-toggle'))) {
+    if (_tvFocusList(_tvListIdx)) return true;
+  }
+  return false;
+};
 function _tvGetChannels() { return Array.from(document.querySelectorAll('#channel-list .channel')); }
 function _tvGetTabs()     { return Array.from(document.querySelectorAll('.mode-toggle button')); }
 function _tvGetCtrls()    {
@@ -2865,11 +2969,10 @@ const _tvModeMap = {
 };
 
 // Schimbă modul și după încărcare focusează primul canal
-function _tvSwitchMode(mode) {
-  switchMode(mode);
-  // Radio are nevoie de ~2s pentru API, restul ~500ms
-  const delay = (mode === 'radio') ? 2200 : 600;
-  setTimeout(() => { if (!_tvFocusList(0)) setTimeout(() => _tvFocusList(0), 800); }, delay);
+async function _tvSwitchMode(mode) {
+  try { await switchMode(mode); } catch (e) { console.error(e); }
+  // Așteptăm efectiv încărcarea (radio poate dura) în loc de un delay fix
+  if (!_tvFocusList(0)) setTimeout(() => { if (!_tvFocusList(0)) _tvFocusTabs(); }, 1000);
 }
 
 // Recuperare focus când se pierde (video/body preia focusul)
@@ -2894,15 +2997,54 @@ const _TV_KEYS = new Set([
 document.addEventListener('keydown', (e) => {
   // Dialog deschis: Escape / Back îl închide, altfel tastele merg în dialog
   const openDlg = document.querySelector('.custom-dialog.open');
+  const keyCode = e.code || e.key;
   if (openDlg) {
     if (e.key === 'Escape' || e.key === 'GoBack' || e.key === 'BrowserBack') {
       e.preventDefault();
       openDlg.classList.remove('open');
+      return;
+    }
+    // Pe TV, D-pad-ul e injectat din APK → navigăm manual prin elementele dialogului
+    if (_IS_TV_DEVICE) {
+      const items = _focusables(openDlg);
+      const a = document.activeElement;
+      if (!openDlg.contains(a)) { e.preventDefault(); items[0]?.focus(); return; }
+      if (keyCode === 'ArrowDown' || keyCode === 'ArrowRight') { e.preventDefault(); _moveIn(items, a, 1); }
+      else if (keyCode === 'ArrowUp' || keyCode === 'ArrowLeft') { e.preventDefault(); _moveIn(items, a, -1); }
+      else if (keyCode === 'Enter' || keyCode === 'NumpadEnter') {
+        e.preventDefault();
+        if (a.tagName === 'INPUT') { a.blur(); a.focus(); a.click(); } else a.click();
+      }
     }
     return;
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const tag = document.activeElement?.tagName;
+  const inFilters = !!document.activeElement?.closest?.('.search-box');
+
+  // ---- TV: zona de filtre (căutare / țară / gen / doar funcționale) ----
+  if (_IS_TV_DEVICE && inFilters) {
+    const a = document.activeElement;
+    const f = _tvGetFilters();
+    const i = f.indexOf(a);
+    if (keyCode === 'ArrowDown') {
+      e.preventDefault();
+      if (i >= f.length - 1) _tvFocusList(0); else f[i + 1].focus();
+    } else if (keyCode === 'ArrowUp') {
+      e.preventDefault();
+      if (i <= 0) _tvFocusTabs(); else f[i - 1].focus();
+    } else if ((keyCode === 'ArrowLeft' || keyCode === 'ArrowRight') && tag === 'SELECT') {
+      e.preventDefault();
+      _stepSelect(a, keyCode === 'ArrowLeft' ? -1 : 1);
+    } else if (keyCode === 'Enter' || keyCode === 'NumpadEnter') {
+      e.preventDefault();
+      if (tag === 'SELECT') _stepSelect(a, 1);
+      else if (tag === 'INPUT' && a.type === 'text') { a.blur(); a.focus(); a.click(); }
+      else a.click();
+    }
+    return;
+  }
+
   // SELECT inclus: săgețile trebuie să schimbe opțiunea, nu canalul
   if (_anyInputFocused || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
@@ -2969,11 +3111,11 @@ document.addEventListener('keydown', (e) => {
     case 'ArrowUp':
       if (inList) {
         if (_tvListIdx > 0) _tvFocusList(_tvListIdx - 1);
-        else _tvFocusTabs();          // sus din top → tab-uri
+        else if (!_tvFocusFilters(99)) _tvFocusTabs(); // sus din top → filtre (țară/căutare)
       } else if (inCtrl) {
         _tvFocusTabs();               // sus din controale → tab-uri
       } else if (inTab) {
-        _tvFocusList(0);              // sus din tab-uri → listă
+        // deja sus de tot — rămânem pe tab-uri
       } else {
         _tvFocusList(_tvListIdx);
       }
@@ -2982,7 +3124,7 @@ document.addEventListener('keydown', (e) => {
     // Jos
     case 'ArrowDown':
       if (inTab) {
-        _tvFocusList(0);
+        if (!_tvFocusFilters(0)) _tvFocusList(0); // jos din tab-uri → filtre
       } else if (inList) {
         const items = _tvGetChannels();
         if (_tvListIdx < items.length - 1) _tvFocusList(_tvListIdx + 1);
@@ -3113,8 +3255,8 @@ function restoreLastPlayed() {
     $('only-working-chk').checked = state.tvOnlyWorking;
     $('tv-health-row').classList.remove('hidden'); // modul implicit e TV
 
-    // Focusăm input-ul de căutare pentru început
-    $('search-input').focus();
+    // Pe TV nu focusăm căutarea: telecomanda ar rămâne „blocată" în input
+    if (!_isTv()) $('search-input').focus();
 
     await loadTV(state.currentTvCountry);
     applyFilter();
