@@ -1088,6 +1088,8 @@
     outline: 3px solid var(--neon-cyan) !important;
     outline-offset: 2px;
   }
+  .channel.load-more { justify-content: center; opacity: .75; }
+  .channel.load-more .channel-name { text-align: center; color: var(--neon-cyan); }
 </style>
 <link rel="stylesheet" href="design-refresh.css">
 </head>
@@ -1800,13 +1802,15 @@ function _normName(name) {
 
 function dedupStations(list) {
   // Pasul 1: dedup după URL exact (prinde aceeași stație din cele 2 query-uri API)
-  const seenUrl = new Set();
-  const byUrl = list.filter(s => {
+  // Păstrăm intrarea cu cele mai multe ascultări (ex. „ProB Radio” vs dublura „Radio Pro-B”),
+  // nu prima întâlnită — API-ul le dă în ordine crescătoare de popularitate.
+  const urlMap = new Map();
+  for (const s of list) {
     const k = s.url.toLowerCase();
-    if (seenUrl.has(k)) return false;
-    seenUrl.add(k);
-    return true;
-  });
+    const ex = urlMap.get(k);
+    if (!ex || s.clickcount > ex.clickcount) urlMap.set(k, s);
+  }
+  const byUrl = [...urlMap.values()];
 
   // Pasul 2: dedup după nume normalizat — păstrăm stream-ul cu cele mai multe clickuri
   // (ex: "Pro FM (128kbps)" și "Pro FM (320kbps)" → păstrăm pe cel mai popular)
@@ -1906,6 +1910,15 @@ function populateGenreOptions() {
     top.map(g => `<option value="${escapeHtml(g)}"${g === state.radioGenre ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('');
 }
 
+// Normalizare pentru căutare: litere mici, fără diacritice, fără spații/semne
+function _fold(s) {
+  return String(s || '').toLowerCase().normalize('NFD')
+    .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '');
+}
+const RENDER_STEP = 250;
+let _lastFilterKey = '';
+state.renderLimit = RENDER_STEP;
+
 function applyFilter() {
   const search = $('search-input').value.toLowerCase().trim();
   let list = getCurrentSource();
@@ -1930,7 +1943,13 @@ function applyFilter() {
     const alive = list.filter(c => state.tvHealth[c.url] !== 'dead');
     if (alive.length) list = alive;
   }
-  if (search) list = list.filter(c => c.name.toLowerCase().includes(search));
+  if (search) {
+    const q = _fold(search);
+    list = list.filter(c => q ? _fold(c.name).includes(q) : c.name.toLowerCase().includes(search));
+  }
+  // Lista nouă (alt mod / altă căutare / alt filtru) → afișăm din nou doar primele rânduri
+  const key = [state.mode, search, dropVal, state.radioGenre].join('|');
+  if (key !== _lastFilterKey) { _lastFilterKey = key; state.renderLimit = RENDER_STEP; }
   state.filtered = list;
   renderList();
 }
@@ -1972,7 +1991,8 @@ function renderList() {
   const savedScroll = searchTerm ? list.scrollTop : 0;
 
   // Limităm DOM-ul pentru scroll fluid pe telefoane și TV box-uri cu memorie redusă.
-  const items = state.filtered.slice(0, 250);
+  const items = state.filtered.slice(0, state.renderLimit);
+  const remaining = state.filtered.length - items.length;
   const showDot = state.mode === 'tv';
   list.innerHTML = items.map((c, i) => {
     const isActive = state.current && state.current.id === c.id;
@@ -2000,7 +2020,20 @@ function renderList() {
         <span class="fav-star ${isFav?'is-fav':''}" data-fav="${i}" data-type="${type}" role="button" tabindex="0" aria-label="${isFav ? 'Elimină din favorite' : 'Adaugă la favorite'}">★</span>
       </div>
     `;
-  }).join('');
+  }).join('') + (remaining > 0
+    ? `<div class="channel load-more" data-more="1" tabindex="0" role="button">
+         <div class="channel-info"><div class="channel-name">⬇ Afișează mai multe (${remaining} rămase)</div></div>
+       </div>`
+    : '');
+
+  // Rândul „mai multe” se încarcă singur când ajunge pe ecran (scroll pe orice container)
+  const moreEl = list.querySelector('[data-more]');
+  if (moreEl && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some(en => en.isIntersecting)) { io.disconnect(); showMoreChannels(); }
+    }, { rootMargin: '300px' });
+    io.observe(moreEl);
+  }
 
   // Reconstruim map-ul url -> rând, pentru update in-place al punctelor de status
   _tvRows.clear();
@@ -2013,14 +2046,22 @@ function renderList() {
   }
 
   requestAnimationFrame(() => {
-    if (searchTerm) {
-      list.scrollTop = savedScroll;
+    if (searchTerm || _keepScroll) {
+      list.scrollTop = _keepScroll ? _keepScroll.top : savedScroll;
+      _keepScroll = null;
     } else {
       const activeEl = list.querySelector('.channel.active');
       if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
     // tabindex e pus direct în HTML (mai sus) ca focusul să meargă imediat după randare
   });
+}
+
+let _keepScroll = null;
+function showMoreChannels() {
+  state.renderLimit += RENDER_STEP;
+  _keepScroll = { top: $('channel-list').scrollTop };
+  renderList();
 }
 
 function escapeHtml(s) {
@@ -2646,6 +2687,7 @@ $('channel-list').addEventListener('click', (e) => {
     return;
   }
 
+  if (e.target.closest('[data-more]')) { showMoreChannels(); return; }
   const ch = e.target.closest('.channel');
   if (ch) {
     const idx = parseInt(ch.dataset.idx);
