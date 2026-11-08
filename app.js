@@ -1,4 +1,32 @@
 /* TMedia — logica aplicației (player, liste, navigare TV, sincronizare) */
+// ============= MUTARE PE ADRESA NOUĂ (tmedia-tv.vercel.app) =============
+// localStorage e legat de adresă. Aplicația Android 1.7+ deschide o dată adresa veche
+// cu #tmedia-export: pagina predă datele aplicației, iar pe adresa nouă le primește înapoi.
+const _EXPORTING = location.hash === '#tmedia-export';
+(function migrateStorage() {
+  const B = window.AndroidBridge;
+  try {
+    if (_EXPORTING && B && typeof B.saveMigration === 'function') {
+      const data = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        data[k] = localStorage.getItem(k);
+      }
+      B.saveMigration(JSON.stringify(data));
+      return;
+    }
+    if (!_EXPORTING && B && typeof B.takeMigration === 'function') {
+      const raw = B.takeMigration();
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      for (const [k, v] of Object.entries(data)) {
+        // nu suprascriem ce există deja pe adresa nouă
+        if (localStorage.getItem(k) === null && typeof v === 'string') localStorage.setItem(k, v);
+      }
+    }
+  } catch (_) { /* migrarea e opțională — aplicația merge și fără */ }
+})();
+
 // ============= RAPORTARE ERORI (doar în aplicația Android, prin Sentry) =============
 (function () {
   let sent = 0;
@@ -2494,6 +2522,7 @@ async function checkAppUpdate(force) {
 
 // ============= INIT =============
 (async () => {
+  if (_EXPORTING) return; // pagina de export (doar predă datele), fără liste / redare
   try {
     $('filter-select').innerHTML = TV_COUNTRIES
       .map(c => `<option value="${c.code}" ${c.code === state.currentTvCountry ? 'selected' : ''}>${c.name}</option>`)
