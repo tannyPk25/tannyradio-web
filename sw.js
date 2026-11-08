@@ -1,4 +1,4 @@
-/* TannyRadio Service Worker
+/* TMedia Service Worker
  * Strategie:
  *  - app shell (same-origin static): stale-while-revalidate — pornește instant din cache,
  *    dar se actualizează în fundal (altfel CSS-ul nou nu ajungea la useri până la bump de versiune)
@@ -6,7 +6,7 @@
  *  - stream-uri, API-uri, logo-uri, CDN, fonturi (cross-origin): fără cache, doar network
  * Bump versiunea ca să invalidezi cache-ul vechi la fiecare release de shell.
  */
-const CACHE = 'tannyradio-v5';
+const CACHE = 'tmedia-v6';
 const SHELL = [
   '/', '/index.html', '/design-refresh.css', '/manifest.json', '/icon.svg',
   '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',

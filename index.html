@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>TannyRadio · TV & Radio</title>
+<title>TMedia · TV & Radio</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<meta name="theme-color" content="#ff2e88">
+<meta name="theme-color" content="#ff4d8d">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="TannyRadio">
+<meta name="apple-mobile-web-app-title" content="TMedia">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&family=Major+Mono+Display&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
@@ -1096,7 +1096,7 @@
 <div class="scanlines"></div>
 <div class="app">
   <header>
-    <div class="logo">TANNYRADIO</div>
+    <div class="logo">TMEDIA</div>
     <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Deschide meniu">☰</button>
     <div class="mode-toggle" role="tablist" aria-label="Tip conținut">
       <button type="button" id="mode-tv" class="active" role="tab" aria-selected="true">TV</button>
@@ -1554,9 +1554,9 @@ const MediaSess = (() => {
     }
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: item.name || 'TannyRadio',
+        title: item.name || 'TMedia',
         artist: (item.country || '') + (item.bitrate ? ` · ${item.bitrate}kbps` : (isTv ? ' · TV' : ' · Radio')),
-        album: 'TannyRadio',
+        album: 'TMedia',
         artwork: art,
       });
     } catch (_) {}
@@ -2795,10 +2795,10 @@ $('custom-url').addEventListener('keydown', (e) => {
 
 $('share-btn').addEventListener('click', async () => {
   if (!state.current) { toast('Selectează ceva mai întâi'); return; }
-  const name = state.current.name || 'TannyRadio';
+  const name = state.current.name || 'TMedia';
   const shareData = {
-    title: 'TannyRadio',
-    text: `Ascult „${name}" pe TannyRadio 📻`,
+    title: 'TMedia',
+    text: `Ascult „${name}" pe TMedia 📺`,
     url: location.href,
   };
   // Web Share API (mobil) — deschide meniul nativ (WhatsApp, etc.)
