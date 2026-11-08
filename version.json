@@ -1,6 +1,6 @@
 {
-  "versionCode": 7,
-  "versionName": "1.6.0",
-  "apkUrl": "https://github.com/tannyPk25/tannyradio-web/releases/download/v1.6.0/TMedia-v1.6.0.apk",
-  "notes": "Ghid TV în player, Back = canalul anterior, pornire pe ultimul canal, favorite ordonate, canale ascunse cu PIN, radio mai stabil."
+  "versionCode": 8,
+  "versionName": "1.7.0",
+  "apkUrl": "https://github.com/tannyPk25/tannyradio-web/releases/download/v1.7.0/TMedia-v1.7.0.apk",
+  "notes": "Adresă nouă (tmedia-tv.vercel.app) cu mutarea automată a datelor și raportare automată a erorilor."
 }
