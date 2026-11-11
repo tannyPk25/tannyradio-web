@@ -7,25 +7,32 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<meta name="theme-color" content="#ff4d8d">
+<meta name="theme-color" content="#0b0b14">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="TMedia">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=VT323&family=Major+Mono+Display&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js" async></script>
-<link rel="stylesheet" href="app.css?v=17">
-<link rel="stylesheet" href="design-refresh.css">
+<link rel="stylesheet" href="app.css?v=18">
+<link rel="stylesheet" href="design-refresh.css?v=18">
 </head>
 <body>
 
-<div class="scanlines"></div>
 <div class="app">
   <header>
-    <div class="logo">TMEDIA</div>
-    <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Deschide meniu">☰</button>
+    <div class="logo">
+      <svg class="logo-mark" viewBox="0 0 108 108" aria-hidden="true">
+        <defs><linearGradient id="lg-a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF4D8D"/><stop offset="1" stop-color="#7C4DFF"/></linearGradient></defs>
+        <rect width="108" height="108" rx="26" fill="url(#lg-a)"/>
+        <rect x="27" y="26" width="54" height="15" rx="7.5" fill="#fff"/>
+        <polygon points="42,38 42,86 78,62" fill="#fff"/>
+      </svg>
+      <span>TMedia</span>
+    </div>
+    <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Mergi la lista de canale"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <div class="mode-toggle" role="tablist" aria-label="Tip conținut">
       <button type="button" id="mode-tv" class="active" role="tab" aria-selected="true">TV</button>
       <button type="button" id="mode-radio" role="tab" aria-selected="false">RADIO</button>
@@ -33,21 +40,21 @@
       <button type="button" id="mode-fav" role="tab" aria-selected="false">FAVORITE</button>
       <button type="button" id="mode-recent" role="tab" aria-selected="false">RECENT</button>
     </div>
-    <div class="stats">CH: <span id="stat-count">0</span> · <span id="stat-mode">TV</span></div>
-    <div class="sleep-indicator" id="sleep-indicator">⏰ <span id="sleep-remaining">--:--</span></div>
+    <div class="stats"><span id="stat-count">0</span> posturi · <span id="stat-mode">TV</span></div>
+    <div class="sleep-indicator" id="sleep-indicator"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 14.6A8.2 8.2 0 0 1 9.4 3.8a8.2 8.2 0 1 0 10.8 10.8z"/></svg> <span id="sleep-remaining">--:--</span></div>
   </header>
 
   <div class="main-container">
     <aside>
       <div class="search-box">
-        <input type="text" id="search-input" placeholder="// caută canal sau stație..." aria-label="Caută canal sau stație"
+        <input type="text" id="search-input" placeholder="Caută canal sau stație…" aria-label="Caută canal sau stație"
           autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
           inputmode="search">
         <select id="filter-select" title="Filtrează după țară" aria-label="Filtrează după țară">
-          <option value="">// toate țările</option>
+          <option value="">Toate țările</option>
         </select>
         <select id="genre-select" class="genre-hidden" title="Filtrează după gen" aria-label="Filtrează după gen">
-          <option value="">// toate genurile</option>
+          <option value="">Toate genurile</option>
         </select>
         <button type="button" id="edit-open" class="sync-btn">✎ Editează lista</button>
         <button type="button" id="digi-open" class="sync-btn hidden">📺 Digi Online (aplicația oficială)</button>
@@ -72,7 +79,8 @@
       <audio id="audio-player"></audio>
 
       <div class="radio-display" id="radio-display">
-        <div class="radio-station-name" id="radio-name">SELECT STATION</div>
+        <div class="radio-art" id="radio-art"></div>
+        <div class="radio-station-name" id="radio-name">Alege o stație</div>
         <div class="radio-tags" id="radio-tags"></div>
         <div class="visualizer" id="visualizer">
           <canvas id="viz-canvas" width="640" height="120"></canvas>
@@ -80,20 +88,19 @@
       </div>
 
       <div class="idle-state" id="idle-state">
-        <pre class="ascii">  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-  █                   █
-  █   ◉  ◉  ◉  ◉  ◉   █
-  █                   █
-  █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█
-     ╲             ╱
-      ═══════════</pre>
-        <h2>SIGNAL · STANDBY</h2>
-        <p>Selectează un canal sau o stație din panoul lateral pentru a începe transmisiunea.</p>
+        <svg class="idle-mark" viewBox="0 0 108 108" aria-hidden="true">
+          <defs><linearGradient id="lg-b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF4D8D"/><stop offset="1" stop-color="#7C4DFF"/></linearGradient></defs>
+          <rect width="108" height="108" rx="26" fill="url(#lg-b)"/>
+          <rect x="27" y="26" width="54" height="15" rx="7.5" fill="#fff"/>
+          <polygon points="42,38 42,86 78,62" fill="#fff"/>
+        </svg>
+        <h2 id="idle-title">Alege un canal</h2>
+        <p id="idle-text">Selectează un canal TV sau o stație radio din listă ca să pornești redarea.</p>
       </div>
 
       <div class="tv-spinner" id="tv-spinner" aria-hidden="true">
         <div class="tv-spinner-ring"></div>
-        <div class="tv-spinner-label">SE CONECTEAZĂ</div>
+        <div class="tv-spinner-label">Se conectează…</div>
       </div>
     </div>
 
@@ -101,20 +108,20 @@
       <div class="np-info">
         <div class="np-logo" id="np-logo">—</div>
         <div class="np-text">
-          <div class="np-title" id="np-title"><span class="np-title-txt" id="np-title-txt">NIMIC ÎN REDARE</span></div>
-          <div class="np-subtitle" id="np-subtitle">aștept semnal...</div>
+          <div class="np-title" id="np-title"><span class="np-title-txt" id="np-title-txt">Nimic în redare</span></div>
+          <div class="np-subtitle" id="np-subtitle">Alege un canal din listă</div>
         </div>
       </div>
       <div class="np-controls">
-        <button class="ctrl-btn" id="prev-btn" type="button" title="Anterior" aria-label="Canalul anterior">⏮</button>
-        <button class="ctrl-btn play" id="play-btn" type="button" aria-label="Redă">▶</button>
-        <button class="ctrl-btn" id="next-btn" type="button" title="Următorul" aria-label="Canalul următor">⏭</button>
-        <button class="ctrl-btn" id="mute-btn" type="button" title="Mute/Unmute" aria-label="Dezactivează sunetul">🔊</button>
-        <button class="ctrl-btn" id="sleep-btn" type="button" title="Sleep timer" aria-label="Temporizator oprire">⏰</button>
-        <button class="ctrl-btn" id="custom-btn" type="button" title="Redă URL custom" aria-label="Deschide un URL personalizat">⌨</button>
-        <button class="ctrl-btn" id="settings-btn" type="button" title="Setări" aria-label="Setări">⚙</button>
-        <button class="ctrl-btn" id="share-btn" type="button" title="Partajează" aria-label="Partajează canalul curent">⤴</button>
-        <button class="ctrl-btn" id="fullscreen-btn" type="button" title="Fullscreen" aria-label="Ecran complet">⛶</button>
+        <button class="ctrl-btn" id="prev-btn" type="button" title="Anterior" aria-label="Canalul anterior"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2.2v14H6zM20 5.6v12.8L10 12z"/></svg></button>
+        <button class="ctrl-btn play" id="play-btn" type="button" data-state="paused" aria-label="Redă"><svg class="ic ic-a" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.3v13.4a1 1 0 0 0 1.53.85l10.8-6.7a1 1 0 0 0 0-1.7L9.53 4.45A1 1 0 0 0 8 5.3z"/></svg><svg class="ic ic-b" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.2"/><rect x="13.5" y="5" width="4" height="14" rx="1.2"/></svg></button>
+        <button class="ctrl-btn" id="next-btn" type="button" title="Următorul" aria-label="Canalul următor"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 5H18v14h-2.2zM4 5.6v12.8L14 12z"/></svg></button>
+        <button class="ctrl-btn" id="mute-btn" type="button" data-state="on" title="Sunet" aria-label="Dezactivează sunetul"><svg class="ic ic-a" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="ic ic-b" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z"/><path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="ctrl-btn" id="sleep-btn" type="button" title="Temporizator oprire" aria-label="Temporizator oprire"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 14.6A8.2 8.2 0 0 1 9.4 3.8a8.2 8.2 0 1 0 10.8 10.8z"/></svg></button>
+        <button class="ctrl-btn" id="custom-btn" type="button" title="Redă un URL" aria-label="Deschide un URL personalizat"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="ctrl-btn" id="settings-btn" type="button" title="Setări" aria-label="Setări"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M19 7h1M4 12h3M13 12h7M4 17h11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="ctrl-btn" id="share-btn" type="button" title="Partajează" aria-label="Partajează canalul curent"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="ctrl-btn" id="fullscreen-btn" type="button" data-state="off" title="Ecran complet" aria-label="Ecran complet"><svg class="ic ic-a" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="ic ic-b" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M20 15h-5v5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <div class="volume-wrap">
           <input type="range" id="volume" min="0" max="100" value="80" title="Volum" aria-label="Volum">
         </div>
@@ -128,7 +135,7 @@
 
 <div class="custom-dialog" id="playlist-dialog" role="dialog" aria-modal="true" aria-label="Import Playlist">
   <div class="custom-dialog-box">
-    <div class="custom-dialog-title">IMPORT PLAYLIST IPTV</div>
+    <div class="custom-dialog-title">Import playlist IPTV</div>
     <div class="pl-tabs">
       <button type="button" class="pl-tab active" data-tab="m3u">M3U URL</button>
       <button type="button" class="pl-tab" data-tab="xtream">Xtream Codes</button>
@@ -151,7 +158,7 @@
 
 <div class="custom-dialog" id="sleep-dialog" role="dialog" aria-modal="true" aria-label="Sleep Timer">
   <div class="custom-dialog-box">
-    <div class="custom-dialog-title">SLEEP TIMER</div>
+    <div class="custom-dialog-title">Temporizator oprire</div>
     <div class="custom-dialog-hint" id="sleep-status">Niciun timer activ.</div>
     <div class="sleep-grid">
       <button type="button" class="sleep-opt" data-min="15">15 min</button>
@@ -170,7 +177,7 @@
 
 <div class="custom-dialog" id="settings-dialog" role="dialog" aria-modal="true" aria-label="Setări">
   <div class="custom-dialog-box">
-    <div class="custom-dialog-title">SETĂRI</div>
+    <div class="custom-dialog-title">Setări</div>
     <label class="set-row"><input type="checkbox" id="set-startlast"> Pornește pe ultimul canal (aplicația Android)</label>
     <label class="set-row"><input type="checkbox" id="set-adult"> Ascunde canalele pentru adulți</label>
     <button type="button" id="set-unhide" class="sync-btn">↺ Arată din nou canalele ascunse</button>
@@ -187,7 +194,7 @@
 
 <div class="custom-dialog" id="pin-dialog" role="dialog" aria-modal="true" aria-label="PIN">
   <div class="custom-dialog-box">
-    <div class="custom-dialog-title">INTRODU PIN-UL</div>
+    <div class="custom-dialog-title">Introdu PIN-ul</div>
     <div class="custom-dialog-hint" id="pin-reason"></div>
     <input type="password" id="pin-input" inputmode="numeric" maxlength="4" placeholder="PIN" autocomplete="off">
     <div class="custom-dialog-btns">
@@ -199,7 +206,7 @@
 
 <div class="custom-dialog" id="sync-dialog" role="dialog" aria-modal="true" aria-label="Sincronizare favorite">
   <div class="custom-dialog-box">
-    <div class="custom-dialog-title">SINCRONIZARE FAVORITE</div>
+    <div class="custom-dialog-title">Sincronizare favorite</div>
     <div class="custom-dialog-hint">Pe dispozitivul cu favoritele: <b>Generează cod</b>. Pe celălalt: scrie codul și apasă <b>Importă</b>.</div>
     <button type="button" id="sync-export">Generează cod</button>
     <div class="sync-code" id="sync-code" aria-live="polite"></div>
@@ -213,7 +220,7 @@
 
 <div class="custom-dialog" id="update-dialog" role="dialog" aria-modal="true" aria-label="Actualizare">
   <div class="custom-dialog-box">
-    <div class="custom-dialog-title">VERSIUNE NOUĂ</div>
+    <div class="custom-dialog-title">Versiune nouă</div>
     <div class="custom-dialog-hint" id="update-text"></div>
     <div class="custom-dialog-btns">
       <button type="button" id="update-later">Mai târziu</button>
@@ -224,7 +231,7 @@
 
 <div class="custom-dialog" id="custom-dialog" role="dialog" aria-modal="true" aria-label="URL Custom">
   <div class="custom-dialog-box">
-    <div class="custom-dialog-title">REDĂ URL CUSTOM</div>
+    <div class="custom-dialog-title">Redă un URL</div>
     <input type="text" id="custom-name" placeholder="Nume (ex: Antena 1)" autocomplete="off">
     <input type="url" id="custom-url" placeholder="URL stream (.m3u8, .mp4, radio...)" autocomplete="off">
     <div class="custom-dialog-btns">
@@ -234,7 +241,7 @@
   </div>
 </div>
 
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 
 </body>
 </html>

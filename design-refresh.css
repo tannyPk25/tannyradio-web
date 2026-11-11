@@ -1,155 +1,534 @@
+/* TMedia — tema vizuală 1.8 (peste app.css)
+   Culorile logo-ului (roz → violet), font Manrope, suprafețe rotunjite.
+   Două stări distincte în listă: „rulează acum” = fundal roz, „focus telecomandă” = inel alb. */
 :root {
-  --bg-deep: #070812;
-  --bg-card: #101321;
-  --bg-elevated: #181c2e;
+  --bg-deep: #0b0b14;
+  --bg-card: #13131f;
+  --bg-elevated: #1b1b2b;
   --neon-pink: #ff4d8d;
-  --neon-cyan: #45d9ff;
-  --neon-violet: #9b7bff;
-  --neon-amber: #ffcf5a;
-  --text-primary: #f7f7fb;
-  --text-dim: #979bae;
-  --grid-line: rgba(174, 181, 214, .16);
-  --surface-line: rgba(255, 255, 255, .08);
-  --radius-sm: 10px;
-  --radius-md: 16px;
-  --radius-lg: 22px;
+  --neon-violet: #7c4dff;
+  --neon-cyan: #b9a3ff;   /* accent secundar (linkuri, focus la tastatură) */
+  --neon-amber: #ffc857;
+  --text-primary: #f5f5fa;
+  --text-dim: #9a9cb2;
+  --grid-line: rgba(255, 255, 255, .1);
+  --line: rgba(255, 255, 255, .08);
+  --surface: rgba(255, 255, 255, .055);
+  --surface-hi: rgba(255, 255, 255, .1);
+  --brand: linear-gradient(135deg, #ff4d8d, #7c4dff);
+  --font-ui: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
 }
 
-body {
+html, body {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text-primary);
   background-color: var(--bg-deep);
+  -webkit-font-smoothing: antialiased;
+}
+body {
   background-image:
-    radial-gradient(circle at 10% 0%, rgba(255, 77, 141, .14), transparent 32rem),
-    radial-gradient(circle at 95% 85%, rgba(69, 217, 255, .11), transparent 34rem);
+    radial-gradient(60rem 30rem at 0% 0%, rgba(255, 77, 141, .1), transparent 70%),
+    radial-gradient(60rem 34rem at 100% 100%, rgba(124, 77, 255, .12), transparent 70%);
 }
+button, input, select { font-family: var(--font-ui); }
 
-.scanlines { background-size: 32px 32px; opacity: .18; }
+/* ---------- Iconițe ---------- */
+.ic { width: 20px; height: 20px; display: block; fill: currentColor; flex-shrink: 0; }
+.ic-b { display: none; }
+#play-btn[data-state="playing"] .ic-a,
+#mute-btn[data-state="muted"] .ic-a,
+#fullscreen-btn[data-state="on"] .ic-a { display: none; }
+#play-btn[data-state="playing"] .ic-b,
+#mute-btn[data-state="muted"] .ic-b,
+#fullscreen-btn[data-state="on"] .ic-b { display: block; }
 
+/* ---------- Antet ---------- */
 header {
-  height: 72px;
-  padding: 0 22px;
-  background: rgba(12, 14, 25, .9);
-  border-bottom-color: var(--surface-line);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
+  height: 64px;
+  padding: 0 20px;
+  gap: 16px;
+  background: rgba(11, 11, 20, .85);
+  border-bottom: 1px solid var(--line);
 }
-
-.logo { font-size: 20px; letter-spacing: .1em; }
-.logo::before { font-size: 14px; }
+.logo {
+  gap: 10px;
+  font-family: var(--font-ui);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+  color: var(--text-primary);
+  text-shadow: none;
+}
+.logo::before { content: none; }
+.logo-mark { width: 34px; height: 34px; display: block; flex-shrink: 0; }
 
 .mode-toggle {
   padding: 4px;
   gap: 2px;
-  border-radius: 12px;
-  border-color: var(--surface-line);
-  background: rgba(255, 255, 255, .05);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
 }
-
-.mode-toggle button { min-height: 38px; padding: 7px 18px; border-radius: 8px; }
+.mode-toggle button {
+  min-height: 36px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.mode-toggle button:hover:not(.active) { color: var(--text-primary); }
 .mode-toggle button.active {
   color: #fff;
-  background: linear-gradient(135deg, var(--neon-pink), #d83cff);
-  box-shadow: 0 8px 22px rgba(255, 77, 141, .25);
+  background: var(--brand);
+  box-shadow: 0 6px 18px rgba(255, 77, 141, .28);
 }
 
+.stats {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.stats span { color: var(--text-primary); }
+.sleep-indicator {
+  margin-left: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--neon-pink);
+  text-shadow: none;
+}
+.sleep-indicator .ic { width: 14px; height: 14px; }
+
+/* ---------- Panoul cu lista ---------- */
 aside {
   width: 340px;
-  padding: 12px;
+  padding: 12px 6px 0;
+  gap: 10px;
+  border-right: 1px solid var(--line);
+  background: rgba(255, 255, 255, .018);
+}
+.search-box {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  border-right-color: var(--surface-line);
-  background: rgba(10, 12, 22, .78);
+  padding: 0 6px;
+  border-bottom: 0;
 }
-
-.search-box { padding: 4px; border-bottom: 0; }
 .search-box input, .search-box select {
-  min-height: 44px;
-  padding: 10px 13px;
-  border-color: var(--surface-line);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, .045);
-}
-
-.channel-list { padding: 2px 0 8px; }
-.channel {
-  min-height: 58px;
-  margin: 4px 0;
-  padding: 9px 12px;
-  border: 1px solid transparent;
-  border-left-width: 1px;
-  border-radius: 13px;
-}
-.channel:hover { border-color: var(--surface-line); background: rgba(255, 255, 255, .045); }
-.channel.active {
-  border-color: rgba(255, 77, 141, .32);
-  background: linear-gradient(100deg, rgba(255, 77, 141, .18), rgba(155, 123, 255, .07));
-  box-shadow: 0 10px 24px rgba(0, 0, 0, .18);
-}
-
-.channel-logo, .np-logo {
-  border-color: var(--surface-line);
-  border-radius: 11px;
-  background: rgba(255, 255, 255, .055);
-}
-
-main { background: #030409; }
-.player-wrap { margin: 12px 12px 0; border-radius: var(--radius-lg); }
-.idle-state {
-  background: radial-gradient(circle at 50% 40%, rgba(155, 123, 255, .13), transparent 45%), #090b14;
-}
-.idle-state .ascii { margin-bottom: 22px; opacity: .9; }
-.idle-state h2 { font-size: clamp(21px, 3vw, 30px); }
-
-.now-playing {
-  height: 88px;
-  margin: 12px;
-  padding: 0 16px;
-  border: 1px solid var(--surface-line);
-  border-radius: var(--radius-md);
-  background: rgba(17, 20, 34, .94);
-  box-shadow: 0 14px 35px rgba(0, 0, 0, .22);
-}
-
-.ctrl-btn, .sidebar-toggle {
-  border-color: var(--surface-line);
+  width: auto;
+  min-width: 0;
+  height: 42px;
+  margin: 0;
+  padding: 0 14px;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(255, 255, 255, .045);
+  background-color: var(--surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
 }
-.ctrl-btn.play {
-  border-radius: 50%;
-  color: #fff;
-  background: linear-gradient(135deg, var(--neon-pink), #e045d7);
-  box-shadow: 0 8px 22px rgba(255, 77, 141, .28);
+.search-box input:focus, .search-box select:focus {
+  border-color: rgba(185, 163, 255, .7);
+  box-shadow: 0 0 0 3px rgba(124, 77, 255, .22);
 }
+#search-input {
+  flex: 1 1 100%;
+  padding-left: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a9cb2' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 12px center;
+  background-size: 18px;
+}
+.search-box select {
+  flex: 1 1 120px;
+  padding-right: 34px;
+  -webkit-appearance: none;
+  appearance: none;
+  font-weight: 600;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a9cb2' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+}
+#genre-select { margin: 0; }
 
-.custom-dialog { background: rgba(3, 4, 9, .78); }
+.sync-btn {
+  flex: 1 1 auto;
+  width: auto;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sync-btn:hover { color: var(--text-primary); border-color: var(--grid-line); background: var(--surface); }
+#edit-open.active { color: #fff; background: var(--brand); border-color: transparent; }
+
+.tv-health-row {
+  flex: 1 1 100%;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.ow-toggle { letter-spacing: 0; color: var(--text-dim); }
+.ow-toggle input { accent-color: var(--neon-pink); }
+#tv-recheck { border-radius: 8px; border-color: var(--line); color: var(--text-dim); }
+.tv-health-progress { font-size: 12px; color: var(--neon-cyan); }
+
+.channel-list { padding: 2px 6px 12px; }
+.channel-list::-webkit-scrollbar { width: 5px; }
+.channel-list::-webkit-scrollbar-track { background: transparent; }
+.channel-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .14); border-radius: 3px; }
+
+.channel {
+  min-height: 60px;
+  margin: 3px 0;
+  padding: 8px 10px;
+  gap: 12px;
+  border: 0;
+  border-radius: 14px;
+  transition: background-color .15s;
+}
+.channel:hover { background: var(--surface); }
+.channel.active {
+  background: linear-gradient(90deg, rgba(255, 77, 141, .22), rgba(124, 77, 255, .1));
+  box-shadow: inset 0 0 0 1px rgba(255, 77, 141, .32);
+}
+.channel.active::after { content: none; }
+
+.channel-logo {
+  width: 44px;
+  height: 44px;
+  padding: 4px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .07);
+}
+.channel-logo.fallback {
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(255, 77, 141, .4), rgba(124, 77, 255, .4));
+}
+.channel-name { font-size: 14.5px; font-weight: 600; letter-spacing: -.005em; }
+.channel-meta {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fav-star { padding: 6px; font-size: 18px; line-height: 1; color: rgba(255, 255, 255, .2); }
+.fav-star.is-fav { color: var(--neon-amber); text-shadow: none; }
+.ch-dot.dead { box-shadow: none; }
+
+/* Egalizator mic pe canalul care rulează */
+.eq { display: flex; align-items: flex-end; gap: 2px; height: 14px; flex-shrink: 0; }
+.eq i {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--neon-pink);
+  transform-origin: bottom;
+  animation: eq 1s ease-in-out infinite;
+}
+.eq i:nth-child(2) { animation-delay: -.35s; }
+.eq i:nth-child(3) { animation-delay: -.7s; }
+@keyframes eq { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+
+.edit-btn { border-color: var(--line); border-radius: 10px; color: var(--text-primary); }
+.channel.load-more { min-height: 48px; opacity: 1; }
+.channel.load-more .channel-name { font-size: 13px; color: var(--neon-cyan); }
+.empty-state, .loading { font-family: var(--font-ui); font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--text-dim); }
+.skel-row { padding: 8px 10px; margin: 3px 0; }
+.skel-box {
+  border-radius: 8px;
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, .04) 25%, rgba(255, 255, 255, .1) 50%, rgba(255, 255, 255, .04) 75%);
+}
+.skel-logo { width: 44px; height: 44px; border-radius: 12px; }
+
+/* ---------- Player ---------- */
+main { background: transparent; }
+.player-wrap { margin: 12px 12px 0; border-radius: 20px; background: #000; }
+
+.idle-state {
+  padding: 24px;
+  background: radial-gradient(circle at 50% 36%, rgba(124, 77, 255, .2), transparent 58%), #0e0e19;
+}
+.idle-mark {
+  width: 84px;
+  height: 84px;
+  margin-bottom: 22px;
+  filter: drop-shadow(0 18px 36px rgba(255, 77, 141, .35));
+}
+.idle-state h2 {
+  margin-bottom: 8px;
+  font-family: var(--font-ui);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--text-primary);
+  text-shadow: none;
+}
+.idle-state p { max-width: 340px; font-size: 14px; line-height: 1.55; color: var(--text-dim); }
+
+.radio-display {
+  padding: 16px;
+  background: radial-gradient(circle at 50% 30%, rgba(255, 77, 141, .16), transparent 62%);
+}
+.radio-display::before { content: none; }
+.radio-art {
+  z-index: 2;
+  width: 128px;
+  height: 128px;
+  margin-bottom: 20px;
+  border-radius: 28px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 52px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(255, 77, 141, .5), rgba(124, 77, 255, .5));
+  box-shadow: 0 22px 50px rgba(0, 0, 0, .45);
+}
+.radio-art:empty { display: none; }
+.radio-art img { width: 100%; height: 100%; object-fit: contain; background: #14141f; }
+.radio-station-name {
+  max-width: 90%;
+  margin-bottom: 8px;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: clamp(22px, 3vw, 36px);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -.02em;
+  color: #fff;
+  text-shadow: none;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.radio-tags {
+  max-width: 80%;
+  margin-bottom: 26px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.visualizer { width: min(480px, 78%); height: 64px; flex-shrink: 0; }
+.visualizer canvas { filter: none; }
+
+.tv-spinner { background: rgba(11, 11, 20, .45); gap: 14px; }
+.tv-spinner-ring {
+  width: 46px;
+  height: 46px;
+  border-color: rgba(255, 255, 255, .16);
+  border-top-color: var(--neon-pink);
+  box-shadow: none;
+}
+.tv-spinner-label { font-family: var(--font-ui); font-size: 14px; font-weight: 600; letter-spacing: 0; color: #fff; text-shadow: none; }
+
+/* ---------- Bara „acum rulează” ---------- */
+.now-playing {
+  height: 76px;
+  margin: 12px;
+  padding: 0 14px;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--bg-card);
+}
+.np-info { gap: 12px; flex: 1 1 160px; }
+.np-logo {
+  width: 48px;
+  height: 48px;
+  padding: 4px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .07);
+  font-size: 18px;
+  font-weight: 800;
+}
+.np-title { font-family: var(--font-ui); font-size: 16px; font-weight: 700; letter-spacing: -.005em; color: var(--text-primary); }
+.np-subtitle {
+  margin-top: 3px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-controls { gap: 4px; flex-shrink: 0; }
+.ctrl-btn {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, .75);
+}
+.ctrl-btn:hover { color: #fff; background: var(--surface-hi); box-shadow: none; }
+.ctrl-btn.play {
+  width: 50px;
+  height: 50px;
+  margin: 0 4px;
+  color: #fff;
+  background: var(--brand);
+  box-shadow: 0 8px 22px rgba(255, 77, 141, .32);
+}
+.ctrl-btn.play:hover { background: var(--brand); box-shadow: 0 8px 26px rgba(255, 77, 141, .5); }
+.ctrl-btn.play .ic { width: 24px; height: 24px; }
+#mute-btn { margin-left: 8px; }
+.volume-wrap { margin-left: 6px; }
+input[type="range"] { width: 92px; border-radius: 4px; }
+input[type="range"]::-webkit-slider-thumb { background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .5); }
+input[type="range"]::-moz-range-thumb { background: #fff; }
+.sidebar-toggle { border: 0; border-radius: 50%; background: var(--surface); }
+
+/* ---------- Dialoguri și mesaje ---------- */
+.custom-dialog { background: rgba(5, 5, 10, .72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 .custom-dialog-box {
   max-height: 90vh;
   overflow-y: auto;
-  border-color: var(--surface-line);
-  border-radius: var(--radius-lg);
-  background: #171a2a;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, .5);
+  padding: 24px;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #181826;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
 }
-.custom-dialog-box input, .sleep-opt, .custom-dialog-btns button { border-radius: 10px; }
+.custom-dialog-title { margin-bottom: 2px; font-family: var(--font-ui); font-size: 18px; font-weight: 800; letter-spacing: -.01em; color: var(--text-primary); }
+.custom-dialog-hint { font-size: 12.5px; line-height: 1.5; letter-spacing: 0; }
+.custom-dialog-box input:not([type="checkbox"]) {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 500;
+}
+.custom-dialog-box input:not([type="checkbox"]):focus { border-color: rgba(185, 163, 255, .7); }
+.custom-dialog-btns { margin-top: 6px; }
+.custom-dialog-btns button, #sync-export {
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.custom-dialog-btns button:hover { background: var(--surface-hi); color: var(--text-primary); border-color: var(--grid-line); }
+#custom-play, #pl-load, #update-now, #sync-import, #pin-ok, #set-pin-save, #sync-export {
+  border-color: transparent;
+  background: var(--brand);
+  color: #fff;
+}
+#custom-play:hover, #pl-load:hover, #update-now:hover, #sync-import:hover, #pin-ok:hover, #set-pin-save:hover {
+  background: var(--brand);
+  border-color: transparent;
+  box-shadow: 0 6px 20px rgba(255, 77, 141, .35);
+}
+.sleep-opt {
+  padding: 13px 6px;
+  border-color: var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.sleep-opt:hover { color: var(--text-primary); border-color: var(--grid-line); background: var(--surface-hi); }
+.sleep-opt.active { color: #fff; background: var(--brand); border-color: transparent; box-shadow: none; }
+.pl-tabs { border-bottom-color: var(--line); }
+.pl-tab { padding: 8px 14px; font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; letter-spacing: 0; }
+.pl-tab.active { color: #fff; border-bottom-color: var(--neon-pink); }
+.set-row { font-size: 14px; font-weight: 500; }
+.set-row input { accent-color: var(--neon-pink); flex-shrink: 0; }
+.sync-code { font-family: var(--font-ui); font-weight: 800; color: #fff; }
 
+.toast {
+  bottom: 108px;
+  padding: 12px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #24243a;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+  transition: transform .3s, opacity .3s, visibility .3s;
+}
+/* Toast-ul ascuns rămânea vizibil ca un chenar gol peste listă */
+.toast:not(.show) { opacity: 0; visibility: hidden; }
+
+/* ---------- Focus ---------- */
+.channel:focus, .ctrl-btn:focus, .mode-toggle button:focus { outline: none; }
+.channel:focus-visible, .mode-toggle button:focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: -2px; background-color: var(--surface); }
+.ctrl-btn:focus-visible, .sleep-opt:focus-visible, .pl-tab:focus-visible, .sync-btn:focus-visible,
+.custom-dialog-btns button:focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 2px; }
+
+/* ---------- Lățimi intermediare ---------- */
 @media (max-width: 1100px) {
-  aside { width: 286px; }
-  .now-playing { gap: 12px; }
-  .np-controls { gap: 7px; }
-  .ctrl-btn { width: 38px; height: 38px; }
-  .ctrl-btn.play { width: 48px; height: 48px; }
-  .volume-wrap input { width: 70px; }
+  aside { width: 300px; }
+  .mode-toggle button { padding: 0 13px; font-size: 12.5px; }
+  .volume-wrap { display: none; }
+}
+@media (max-width: 900px) {
+  .stats, #custom-btn, #sleep-btn { display: none; }
+}
+@media (max-height: 620px) {
+  .radio-art { width: 92px; height: 92px; margin-bottom: 14px; border-radius: 22px; font-size: 38px; }
+  .radio-tags { margin-bottom: 16px; }
+  .visualizer { height: 48px; }
+  .idle-mark { width: 64px; height: 64px; margin-bottom: 16px; }
+  .idle-state h2 { font-size: 22px; }
 }
 
-/* Mobil: doar după lățime — în WebView-ul Android (orientation: portrait) poate
-   raporta fals și layout-ul de mobil nu se aplica deloc */
+/* ---------- Telefon ----------
+   Doar după lățime — în WebView-ul Android (orientation: portrait) poate raporta fals. */
 @media (max-width: 700px) {
   html, body { height: 100%; overflow: hidden; }
   .app { height: 100dvh; min-height: 0; }
-  header { min-height: 58px; padding: env(safe-area-inset-top, 0) 10px 0; gap: 8px; }
-  .logo { font-size: 12px; }
-  .logo::before { display: none; }
-  .mode-toggle { min-width: 0; }
-  .mode-toggle button { min-height: 34px; padding: 5px 9px; }
+  header { height: auto; min-height: 56px; padding: env(safe-area-inset-top, 0) 10px 0; gap: 8px; }
+  .logo span { display: none; }
+  .logo-mark { width: 32px; height: 32px; }
+  .sidebar-toggle { display: none; }
+  .mode-toggle { min-width: 0; flex: 1; overflow-x: auto; }
+  .mode-toggle button { min-height: 34px; padding: 0 12px; font-size: 12px; }
   .main-container {
     flex: 1;
     flex-direction: column;
@@ -160,47 +539,86 @@ main { background: #030409; }
   main { width: 100%; height: auto; min-height: 304px; flex: 0 0 304px; overflow: visible; }
   .player-wrap { min-height: 224px; margin: 8px 8px 0; border-radius: 16px; }
   .idle-state { padding: 18px; }
-  .idle-state .ascii { display: none; }
-  .idle-state h2 { font-size: 20px; margin-bottom: 8px; }
-  .idle-state p { font-size: 11px; }
-  .now-playing { height: 72px; margin: 8px; padding: 0 9px; gap: 7px; border-radius: 14px; }
+  .idle-mark { width: 56px; height: 56px; margin-bottom: 14px; }
+  .idle-state h2 { font-size: 20px; margin-bottom: 6px; }
+  .idle-state p { font-size: 13px; }
+  .now-playing { height: 64px; margin: 8px; padding: 0 8px 0 10px; gap: 8px; border-radius: 16px; }
   .np-logo { width: 42px; height: 42px; }
-  .np-info { gap: 8px; }
-  .np-title { font-size: 16px; }
-  .np-subtitle { max-width: 105px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .np-controls { gap: 5px; }
-  .ctrl-btn { width: 36px; height: 36px; }
-  .ctrl-btn.play { width: 42px; height: 42px; }
-  #prev-btn, #next-btn, #mute-btn, #sleep-btn, #fullscreen-btn, #custom-btn { display: none; }
+  .np-info { gap: 10px; flex-basis: 100px; }
+  .np-title { font-size: 15px; }
+  .np-subtitle { font-size: 12px; }
+  .np-controls { gap: 2px; }
+  .ctrl-btn { width: 38px; height: 38px; font-size: 14px; }
+  .ctrl-btn.play { width: 44px; height: 44px; margin: 0 2px; }
+  #prev-btn, #next-btn, #mute-btn, #sleep-btn, #custom-btn { display: none; }
   .volume-wrap { display: none; }
   aside {
     width: 100%;
     height: auto;
     min-height: 410px;
     flex: 1 0 410px; /* umple ecranul până jos, fără bandă goală */
-    padding: 8px;
-    border-top-color: var(--surface-line);
-    background: var(--bg-deep);
+    padding: 10px 2px 0;
+    border-right: 0;
+    border-top: 0;
+    background: transparent;
   }
-  .search-box { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-  .search-box input:first-child { grid-column: 1 / -1; }
-  /* Țara ocupă tot rândul când nu e afișat și genul (mod TV) */
-  .search-box:has(#genre-select.genre-hidden) #filter-select { grid-column: 1 / -1; }
-  .tv-health-row { grid-column: 1 / -1; flex-wrap: wrap; row-gap: 4px; }
+  .search-box select { flex-basis: 40%; }
+  .tv-health-row { flex-wrap: wrap; row-gap: 4px; }
   .tv-health-progress { flex-basis: 100%; }
-  .search-box input, .search-box select { min-height: 42px; margin-bottom: 0; }
   .channel-list { min-height: 0; }
-  .channel { min-height: 56px; margin: 3px 0; }
-  .radio-station-name { font-size: 24px; margin-bottom: 14px; padding: 0 18px; }
-  .radio-tags { margin-bottom: 22px; }
-  .visualizer { height: 76px; }
-  .custom-dialog-box { padding: 22px 18px; }
+  .channel { min-height: 58px; padding: 8px 10px; }
+  .channel-logo { width: 42px; height: 42px; }
+  .channel-name { font-size: 14.5px; }
+  .radio-art { width: 72px; height: 72px; margin-bottom: 10px; border-radius: 18px; font-size: 30px; }
+  .radio-station-name { font-size: 20px; margin-bottom: 4px; }
+  .radio-tags { margin-bottom: 12px; font-size: 11.5px; }
+  .visualizer { height: 40px; }
+  .custom-dialog-box { padding: 20px 16px; }
+  .toast { bottom: 24px; }
 }
 
-@media (min-width: 950px) {
-  aside { width: 380px; }
-  header { height: 78px; }
-  .now-playing { height: 96px; }
+/* ---------- Televizor (telecomandă, privit de la distanță) ---------- */
+.tv-device .stats { font-size: 13px; }
+.tv-device .mode-toggle button { min-height: 40px; font-size: 14px; }
+.tv-device .channel { min-height: 62px; }
+.tv-device .channel-name { font-size: 16px; }
+.tv-device .channel-meta { font-size: 13px; }
+.tv-device .sync-btn { font-size: 13px; }
+.tv-device .np-title { font-size: 18px; }
+.tv-device .np-subtitle { font-size: 13.5px; }
+.tv-device .ctrl-btn { width: 44px; height: 44px; }
+.tv-device .ctrl-btn.play { width: 54px; height: 54px; }
+/* Fără rost pe TV: volumul e pe telecomandă, redarea e oricum pe tot ecranul */
+.tv-device #share-btn, .tv-device #fullscreen-btn, .tv-device #mute-btn,
+.tv-device .volume-wrap, .tv-device .sidebar-toggle { display: none; }
+.tv-device #custom-btn, .tv-device #sleep-btn { display: flex; }
+/* TV box-urile au procesoare slabe: fără blur și fără animații continue */
+.tv-device .custom-dialog { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(5, 5, 10, .86); }
+.tv-device .logo-backdrop { display: none; }
+.tv-device .eq i { animation: none; transform: scaleY(.6); }
+.tv-device .eq i:nth-child(2) { transform: scaleY(1); }
+.tv-device .channel { transition: none; }
+
+/* Focusul telecomenzii: inel alb + fundal deschis, vizibil din orice colț al camerei */
+.tv-device .search-box input:focus, .tv-device .search-box select:focus,
+.tv-device .search-box button:focus, .tv-device .channel:focus,
+.tv-device .mode-toggle button:focus,
+.tv-device .custom-dialog-box input:focus, .tv-device .custom-dialog-box button:focus {
+  outline: 3px solid #fff !important;
+  outline-offset: -3px;
+  box-shadow: none;
+}
+.tv-device .channel:focus { background: rgba(255, 255, 255, .16); }
+.tv-device .channel.active:focus { background: linear-gradient(90deg, rgba(255, 77, 141, .42), rgba(124, 77, 255, .3)); }
+.tv-device .mode-toggle button:focus:not(.active) { color: #fff; background: rgba(255, 255, 255, .16); }
+.tv-device .search-box button:focus { color: #fff; background: rgba(255, 255, 255, .16); }
+.tv-device .ctrl-btn:focus { outline: 3px solid #fff !important; outline-offset: 2px; color: #fff; background: rgba(255, 255, 255, .18); }
+.tv-device .ctrl-btn.play:focus { background: var(--brand); }
+.tv-device .ow-toggle:focus-within, .tv-device .set-row:focus-within {
+  outline: 3px solid #fff !important;
+  outline-offset: 4px;
+  border-radius: 6px;
+  color: #fff;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -211,6 +629,5 @@ main { background: #030409; }
   }
 }
 
-/* Toast-ul ascuns rămânea vizibil ca un chenar gol peste listă */
-.toast:not(.show) { opacity: 0; visibility: hidden; }
-.toast { transition: transform .3s, opacity .3s, visibility .3s; }
+/* Titlul din panoul central poate fi numele unui canal lung („reia canalul X”) */
+.idle-state h2 { max-width: 90%; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }

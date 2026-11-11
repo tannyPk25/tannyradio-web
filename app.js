@@ -196,6 +196,28 @@ const $ = id => document.getElementById(id);
 const video = $('video-player');
 const audio = $('audio-player');
 
+// Iconițele butoanelor sunt SVG-uri în pagină; starea (redare / mut) se schimbă prin data-state
+function setPlayUi(playing) {
+  const b = $('play-btn');
+  b.dataset.state = playing ? 'playing' : 'paused';
+  b.setAttribute('aria-label', playing ? 'Pauză' : 'Redă');
+}
+// Panoul din mijloc când nu rulează nimic: mesajul de start sau „reia canalul X"
+const IDLE_TITLE = 'Alege un canal';
+const IDLE_TEXT = 'Selectează un canal TV sau o stație radio din listă ca să pornești redarea.';
+function showIdle(item) {
+  $('idle-title').textContent = item ? item.name : IDLE_TITLE;
+  $('idle-text').textContent = item
+    ? (_IS_TV_DEVICE ? 'Apasă OK pe canal ca să reiei redarea.' : 'Apasă ▶ ca să reiei redarea.')
+    : IDLE_TEXT;
+  $('idle-state').classList.remove('hidden');
+}
+function setMuteUi() {
+  const b = $('mute-btn');
+  b.dataset.state = state.muted ? 'muted' : 'on';
+  b.setAttribute('aria-label', state.muted ? 'Activează sunetul' : 'Dezactivează sunetul');
+}
+
 // playsinline needed for iOS Safari — set via JS to avoid linter warnings
 video.setAttribute('playsinline', '');
 video.style.display = 'none'; // apare doar când rulează un canal TV în pagină
@@ -263,22 +285,27 @@ const Viz = (() => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     ctx.clearRect(0, 0, w, h);
     const n = values.length;
-    const gap = 3;
+    const gap = 6;
     const barW = (w - (n - 1) * gap) / n;
+    const r = Math.min(barW / 2, 5);
+    // Un singur gradient pe toată lățimea (culorile logo-ului), bare rotunjite sus
+    const grad = ctx.createLinearGradient(0, 0, w, 0);
+    grad.addColorStop(0, '#ff4d8d');
+    grad.addColorStop(1, '#7c4dff');
+    ctx.fillStyle = grad;
     for (let i = 0; i < n; i++) {
       const v = paused ? 0.04 : values[i];
-      const barH = Math.max(2, v * h);
+      const barH = Math.max(r * 2, v * h);
       const x = i * (barW + gap);
       const y = h - barH;
-      const grad = ctx.createLinearGradient(0, y, 0, h);
-      grad.addColorStop(0, '#ff2e88');
-      grad.addColorStop(0.5, '#b14eff');
-      grad.addColorStop(1, '#00f0ff');
-      ctx.fillStyle = grad;
-      ctx.fillRect(x, y, barW, barH);
-      // Vârf strălucitor
-      ctx.fillStyle = '#ffb627';
-      ctx.fillRect(x, y, barW, Math.max(1, barH * 0.04));
+      ctx.beginPath();
+      ctx.moveTo(x, h);
+      ctx.lineTo(x, y + r);
+      ctx.arcTo(x, y, x + r, y, r);
+      ctx.arcTo(x + barW, y, x + barW, y + r, r);
+      ctx.lineTo(x + barW, h);
+      ctx.closePath();
+      ctx.fill();
     }
   }
 
@@ -759,7 +786,7 @@ function populateGenreOptions() {
     .slice(0, 28)
     .map(([tag]) => tag)
     .sort();
-  sel.innerHTML = '<option value="">// toate genurile</option>' +
+  sel.innerHTML = '<option value="">Toate genurile</option>' +
     top.map(g => `<option value="${escapeHtml(g)}"${g === state.radioGenre ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('');
 }
 
@@ -834,7 +861,7 @@ function renderList() {
   $('stat-count').textContent = state.filtered.length;
 
   if (!state.filtered.length) {
-    list.innerHTML = '<div class="empty-state">// nimic găsit</div>';
+    list.innerHTML = '<div class="empty-state">Nimic găsit</div>';
     return;
   }
 
@@ -843,7 +870,7 @@ function renderList() {
     const select = $('filter-select');
     if (select.options.length <= 1) {
       const countries = [...new Set(getCurrentSource().map(c => c.country))].filter(Boolean).sort();
-      select.innerHTML = '<option value="">// toate</option>' +
+      select.innerHTML = '<option value="">Toate</option>' +
         countries.map(c => `<option value="${c}">${c}</option>`).join('');
     }
   }
@@ -880,6 +907,7 @@ function renderList() {
           <div class="channel-name">${escapeHtml(c.name)}</div>
           <div class="channel-meta">${escapeHtml(meta)}</div>
         </div>
+        ${isActive ? '<span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>' : ''}
         ${state.editMode
           ? (state.mode === 'fav'
               ? `<span class="edit-btn" data-act="up" data-i="${i}" role="button" aria-label="Mută mai sus">▲</span><span class="edit-btn" data-act="down" data-i="${i}" role="button" aria-label="Mută mai jos">▼</span>`
@@ -987,7 +1015,7 @@ function setVolumeFill(pct) {
   const v = $('volume');
   const p = Math.max(0, Math.min(100, pct));
   v.style.background =
-    `linear-gradient(90deg, var(--neon-pink) 0%, var(--neon-cyan) ${p}%, var(--bg-elevated) ${p}%)`;
+    `linear-gradient(90deg, var(--neon-pink) 0%, var(--neon-violet) ${p}%, rgba(255,255,255,.12) ${p}%)`;
 }
 
 // ============= PLAYBACK =============
@@ -1022,10 +1050,11 @@ window.__nativeClosed = function () {
   clearTimeout(_tvWatchdog);
   hideSpinner();
   state.pendingResume = true;
-  $('play-btn').textContent = '▶';
-  $('play-btn').setAttribute('aria-label', 'Redă');
+  setPlayUi(false);
   Bridge.notifyPaused();
-  if (_isTv()) _tvFocusList(_tvListIdx);
+  video.style.display = 'none';
+  if (state.current) showIdle(state.current);
+  if (_isTv()) _tvFocusCurrent();
 };
 
 function stopAll(keepNative) {
@@ -1071,13 +1100,12 @@ window.__broadcastStop = function () {
   stopAll();
   Viz.stop();
   state.current = null;
-  $('idle-state').classList.remove('hidden');
-  setNpTitle('NIMIC ÎN REDARE');
+  showIdle(null);
+  setNpTitle('Nimic în redare');
   video.style.display = 'none';
-  $('np-subtitle').textContent = 'aștept semnal...';
+  $('np-subtitle').textContent = 'Alege un canal din listă';
   $('np-logo').textContent = '—';
-  $('play-btn').textContent = '▶';
-  $('play-btn').setAttribute('aria-label', 'Redă');
+  setPlayUi(false);
   $('visualizer')?.classList.add('paused');
   $('radio-display')?.classList.remove('active');
   setBackdrop('');
@@ -1151,11 +1179,13 @@ function play(item) {
     $('radio-display').classList.add('active');
     $('radio-name').textContent = item.name;
     $('radio-tags').textContent = item.tags || '';
+    $('radio-art').innerHTML = npLogo.innerHTML; // același logo (sau inițiala), mare
+    const artImg = $('radio-art').querySelector('img');
+    if (artImg) artImg.onerror = () => { $('radio-art').textContent = npFb; };
     playRadio(item);
   }
 
-  $('play-btn').textContent = '⏸';
-  $('play-btn').setAttribute('aria-label', 'Pauză');
+  setPlayUi(true);
   if (itemType === 'tv') updateNpEpg();
   Bridge.notifyPlaying(item, itemType === 'tv');
   pushRecent(item, itemType);
@@ -1575,14 +1605,14 @@ async function switchMode(mode) {
     populateGenreOptions();
   } else if (mode === 'playlist') {
     const groups = [...new Set(state.playlistList.flatMap(c => c.categories))].filter(Boolean).sort();
-    $('filter-select').innerHTML = '<option value="">// toate grupurile</option>' +
+    $('filter-select').innerHTML = '<option value="">Toate grupurile</option>' +
       groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
   } else if (mode === 'recent') {
-    $('filter-select').innerHTML = '<option value="">// tv + radio</option>' +
-      '<option value="tv">// doar TV</option>' +
-      '<option value="radio">// doar radio</option>';
+    $('filter-select').innerHTML = '<option value="">TV + radio</option>' +
+      '<option value="tv">Doar TV</option>' +
+      '<option value="radio">Doar radio</option>';
   } else {
-    $('filter-select').innerHTML = '<option value="">// toate</option>';
+    $('filter-select').innerHTML = '<option value="">Toate</option>';
   }
   applyFilter();
 }
@@ -1736,7 +1766,7 @@ $('play-btn').addEventListener('click', () => {
   if (!isTv && state.radioNative) {
     let playing = true;
     try { playing = window.AndroidBridge.toggleRadio(); } catch (_) {}
-    $('play-btn').textContent = playing ? '⏸' : '▶';
+    setPlayUi(playing);
     $('visualizer')?.classList.toggle('paused', !playing);
     return;
   }
@@ -1746,16 +1776,14 @@ $('play-btn').addEventListener('click', () => {
       // Stream-ul live a expirat cât a stat pe pauză → îl reîncărcăm de la zero
       if (state.current) play(state.current);
     });
-    $('play-btn').textContent = '⏸';
-    $('play-btn').setAttribute('aria-label', 'Pauză');
+    setPlayUi(true);
     $('visualizer')?.classList.remove('paused');
     Bridge.notifyPlaying(state.current, isTv);
   } else {
     el.pause();
     clearTimeout(_tvWatchdog); // pauză voluntară ≠ canal mort
     hideSpinner();
-    $('play-btn').textContent = '▶';
-    $('play-btn').setAttribute('aria-label', 'Redă');
+    setPlayUi(false);
     $('visualizer')?.classList.add('paused');
     Bridge.notifyPaused();
   }
@@ -1885,8 +1913,7 @@ $('share-btn').addEventListener('click', async () => {
 $('mute-btn').addEventListener('click', () => {
   state.muted = !state.muted;
   video.muted = audio.muted = state.muted;
-  $('mute-btn').textContent = state.muted ? '🔇' : '🔊';
-  $('mute-btn').setAttribute('aria-label', state.muted ? 'Activează sunetul' : 'Dezactivează sunetul');
+  setMuteUi();
   if (state.radioNative) { try { window.AndroidBridge.setRadioVolume(radioVolume()); } catch (_) {} }
   try { localStorage.setItem('tr-muted', state.muted ? '1' : '0'); } catch (_) {}
 });
@@ -1921,10 +1948,10 @@ $('fullscreen-btn').addEventListener('click', () => {
 });
 
 document.addEventListener('fullscreenchange', () => {
-  $('fullscreen-btn').textContent = document.fullscreenElement ? '✕' : '⛶';
+  $('fullscreen-btn').dataset.state = document.fullscreenElement ? 'on' : 'off';
 });
 document.addEventListener('webkitfullscreenchange', () => {
-  $('fullscreen-btn').textContent = document.webkitFullscreenElement ? '✕' : '⛶';
+  $('fullscreen-btn').dataset.state = document.webkitFullscreenElement ? 'on' : 'off';
 });
 
 audio.addEventListener('error', () => {
@@ -2021,6 +2048,15 @@ function _tvFocusList(idx) {
   items[_tvListIdx].focus({ preventScroll: false });
   items[_tvListIdx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   return true;
+}
+
+// La ieșirea din player: focus pe canalul care tocmai rula (după zapping cu sus/jos
+// nu mai e cel de pe care ai intrat). Dacă nu e în lista afișată → ultimul rând folosit.
+function _tvFocusCurrent() {
+  const cur = state.current;
+  const i = cur ? state.filtered.findIndex(c => c.id === cur.id) : -1;
+  if (i >= 0 && i >= state.renderLimit) { state.renderLimit = i + RENDER_STEP; renderList(); }
+  return _tvFocusList(i >= 0 ? i : _tvListIdx);
 }
 
 function _tvFocusTabs(idx) {
@@ -2299,7 +2335,7 @@ sidebarToggleBtn.addEventListener('click', () => {
   video.volume = audio.volume = vv / 100;
   setVolumeFill(vv);
   video.muted = audio.muted = state.muted;
-  $('mute-btn').textContent = state.muted ? '🔇' : '🔊';
+  setMuteUi();
 })();
 
 // Pre-încarcă ultimul canal în bara "now playing" (fără autoplay — blocat de browser).
@@ -2310,7 +2346,7 @@ function restoreLastPlayed() {
   if (!last || !last.url) return;
   state.current = last;
   state.pendingResume = true; // nimic nu e încă încărcat în media element
-  $('idle-state').classList.add('hidden');
+  showIdle(last);
   setNpTitle(last.name);
   setBackdrop(last.logo);
   $('np-subtitle').textContent = (last.country || '') + (last.bitrate ? ` · ${last.bitrate}kbps` : '') + ' · apasă ▶ pentru a relua';
@@ -2325,7 +2361,7 @@ function restoreLastPlayed() {
   } else {
     npLogo.textContent = npFb;
   }
-  $('play-btn').textContent = '▶';
+  setPlayUi(false);
 }
 
 // ============= EDITARE LISTĂ (ordine favorite / ascundere canale) =============

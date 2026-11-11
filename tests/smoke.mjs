@@ -85,7 +85,7 @@ try {
     stopAll();
     return r;
   });
-  ok(f16.prevIsA && f16.lastOk, 'Back: revine la canalul anterior', JSON.stringify(f16));
+  ok(f16.prevIsA && f16.lastOk, 'Back ținut apăsat: revine la canalul anterior', JSON.stringify(f16));
   ok(f16.reorder, 'favoritele se pot reordona');
   ok(f16.hidden && f16.unhidden, 'canalele se pot ascunde și readuce');
   ok(f16.wrongPin && f16.goodPin, 'PIN: refuză PIN greșit, acceptă PIN corect');
@@ -107,6 +107,20 @@ try {
   await key('Enter');
   const radioOk = await tv.waitForFunction(() => state.mode === 'radio', { timeout: 10000 }).then(() => true, () => false);
   ok(onRadioTab === 'mode-radio' && radioOk, 'telecomanda comută pe RADIO', onRadioTab);
+  // Back din player-ul nativ (1.8): revii în listă, cu focusul pe canalul care rula
+  await tv.waitForFunction(() => state.filtered.length > 4 && document.querySelectorAll('#channel-list .channel').length > 4, { timeout: 30000 }).catch(() => {});
+  const back = await tv.evaluate(() => {
+    state.current = { ...state.filtered[3], _type: 'tv' };
+    state.nativeActive = true;
+    _tvFocusList(0);
+    window.__nativeClosed();
+    return {
+      idx: document.activeElement?.dataset?.idx,
+      idle: !$('idle-state').classList.contains('hidden') && $('idle-title').textContent === state.current.name,
+      paused: $('play-btn').dataset.state === 'paused',
+    };
+  });
+  ok(back.idx === '3' && back.idle && back.paused, 'Back din player: focus pe canalul curent din listă', JSON.stringify(back));
   ok(tvErrors.length === 0, 'fără erori JavaScript (TV)', tvErrors.join(' | '));
 } finally {
   await browser.close();
