@@ -1,6 +1,6 @@
 {
-  "versionCode": 8,
-  "versionName": "1.7.0",
-  "apkUrl": "https://github.com/tannyPk25/tannyradio-web/releases/download/v1.7.0/TMedia-v1.7.0.apk",
-  "notes": "Adresă nouă (tmedia-tv.vercel.app) cu mutarea automată a datelor și raportare automată a erorilor."
+  "versionCode": 9,
+  "versionName": "1.8.0",
+  "apkUrl": "https://github.com/tannyPk25/tannyradio-web/releases/download/v1.8.0/TMedia-v1.8.0.apk",
+  "notes": "Design nou, iar pe TV butonul Back iese din player în lista de canale (ținut apăsat = canalul anterior)."
 }
